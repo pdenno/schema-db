@@ -1,0 +1,12 @@
+;;; https://github.com/borkdude/clj-kondo/blob/master/doc/config.md
+{:project-root-uri "file:///home/msid/pdenno/Documents/git/RADmapper"
+ :lint-as {com.wsscode.pathom.connect/defmutation            clj-kondo.lint-as/def-catch-all
+           com.wsscode.pathom.connect/defresolver            clj-kondo.lint-as/def-catch-all
+           com.wsscode.pathom3.connect.operation/defmutation clojure.core/defn
+           com.wsscode.pathom3.connect.operation/defresolver clojure.core/defn
+           com.wsscode.pathom3.plugin/defplugin              clojure.core/def
+           com.wsscode.promesa.macros/clet                   clojure.core/let
+           com.wsscode.promesa.macros/ctry                   clojure.core/try
+           mount.core/defstate                               clj-kondo.lint-as/def-catch-all
+           schema-db.macros/defparse                         clojure.core/defn}}
+
