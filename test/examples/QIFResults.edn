@@ -1,0 +1,184 @@
+[#:schema{:subversion "",
+          :pathname "/opt/messaging/sources/QIF/3.0/xsd/QIFApplications/QIFResults.xsd",
+          :sdo :qif,
+          :type :generic/message-schema,
+          :name "urn:QIF-3:Application:QIFResults",
+          :spec :qif,
+          :content
+          [{:sp/name "Results",
+            :sp/type "ResultsType",
+            :sp/function #:fn{:type :type-ref},
+            :doc/docString "The global Results element is a the top-level QIF element for\n        measurement results."}
+           {:sp/name "ActualComponentSets",
+            :sp/type "ActualComponentSetsType",
+            :sp/function #:fn{:type :type-ref},
+            :doc/docString
+            "The global ActualComponentSets element is a collection of data\n        associated with the actual components of multiple manufactured\n        products."}
+           {:sp/name "ActualComponentSet",
+            :sp/type "ActualComponentSetType",
+            :sp/function #:fn{:type :type-ref},
+            :doc/docString
+            "The global ActualComponentSet element is a collection of data\n        associated with the actual components of a single manufactured\n        product."}
+           {:sp/name "ActualComponent",
+            :sp/type "ActualComponentType",
+            :sp/function #:fn{:type :type-ref},
+            :doc/docString "The global ActualComponent element is the data of an actual\n        component."}
+           {:model/sequence
+            [#:model{:sequence
+                     [{:sp/name "Attributes",
+                       :sp/minOccurs :0,
+                       :sp/function #:fn{:type :gelem},
+                       :doc/docString
+                       "The optional Attributes element contains user defined\n            attributes (typified, binary array, or XML structured)."}
+                      {:sp/name "InspectionTraceability",
+                       :sp/type "InspectionTraceabilityType",
+                       :sp/minOccurs :0,
+                       :sp/function #:fn{:type :gelem},
+                       :doc/docString
+                       "The optional InspectionTraceability element gives traceability\n            information that applies this set of measurement results."}
+                      {:sp/name "ThisResultsInstanceQPId",
+                       :sp/type "QPIdType",
+                       :sp/minOccurs :0,
+                       :sp/function #:fn{:type :gelem},
+                       :doc/docString
+                       "The optional ThisResultsInstanceQPId element uniquely\n            identifies the measurement results. Different versions of the\n            measurement results must have different ThisResultsInstanceQPId\n            elements."}
+                      {:sp/name "ExternalFileReferences",
+                       :sp/type "ExternalFileReferencesType",
+                       :sp/minOccurs :0,
+                       :sp/function #:fn{:type :gelem},
+                       :doc/docString
+                       "The optional ExternalFileReferences element is a list of\n            references to additional files created in the measurement\n            process, e.g. photos."}
+                      {:sp/name "MeasuredFeatures",
+                       :sp/type "FeatureMeasurementsType",
+                       :sp/minOccurs :0,
+                       :sp/function #:fn{:type :gelem},
+                       :doc/docString
+                       "The optional MeasuredFeatures element gives information about\n            the features used in the measurement results."}
+                      {:sp/name "MeasuredPointSets",
+                       :sp/type "MeasuredPointSetsType",
+                       :sp/minOccurs :0,
+                       :sp/function #:fn{:type :gelem},
+                       :doc/docString
+                       "The MeasuredPointSets element is a list of measured\n            points sets which can be referenced by feature measurements."}
+                      {:sp/name "MeasuredCharacteristics",
+                       :sp/minOccurs :0,
+                       :sp/function #:fn{:type :gelem},
+                       :doc/docString
+                       "The optional MeasuredCharacteristics element gives information\n            about the characteristics used in the measurement results."}
+                      {:sp/name "ActualTransforms",
+                       :sp/type "TransformListType",
+                       :sp/minOccurs :0,
+                       :sp/function #:fn{:type :gelem},
+                       :doc/docString
+                       "The optional ActualTransforms element gives information about\n            the actual transforms used in the measurement results. These\n            transforms can represent actual coordinate system transforms or\n            actual datum reference frame transforms."}
+                      {:sp/name "CoordinateSystemActualTransformAssociations",
+                       :sp/minOccurs :0,
+                       :sp/function #:fn{:type :gelem},
+                       :doc/docString
+                       "The optional CoordinateSystemActualTransformAssociations\n            element gives information about the association of actual\n            transforms with coordinate systems."}
+                      {:sp/name "InspectionStatus",
+                       :sp/type "InspectionStatusType",
+                       :sp/function #:fn{:type :gelem},
+                       :doc/docString "The InspectionStatus element reports the status of the\n            MeasurementResults."}
+                      {:sp/name "ActualComponentIds",
+                       :sp/type "ArrayReferenceType",
+                       :sp/minOccurs :0,
+                       :sp/function #:fn{:type :gelem},
+                       :doc/docString "The ActualComponentIds element is the list of actual component\n            QIF ids."}]}
+             #:sp{:xsdType :attribute}],
+            :sp/name "MeasurementResultsType",
+            :doc/docString "The MeasurementResultsType defines information about measurement\n        results."}
+           {:model/sequence
+            [#:model{:sequence
+                     [{:sp/name "MeasurementResults",
+                       :sp/type "MeasurementResultsType",
+                       :sp/maxOccurs :unbounded,
+                       :sp/function #:fn{:type :gelem},
+                       :doc/docString "Each MeasurementResults element is a measurement results in the\n            set."}]}
+             {:sp/xsdType :attribute,
+              :doc/docString "The required n attribute is the number of measurement results in\n          this set."}],
+            :sp/name "MeasurementResultsSetType",
+            :doc/docString "The MeasurementResultsSetType defines a set of measurement\n        results."}
+           {:model/sequence
+            [{:sp/name "Version",
+              :sp/type "VersionType",
+              :sp/minOccurs :0,
+              :sp/function #:fn{:type :gelem},
+              :doc/docString "The optional Version element gives version information about\n            the measurements results."}
+             {:sp/name "MeasurementResultsSet",
+              :sp/type "MeasurementResultsSetType",
+              :sp/function #:fn{:type :gelem},
+              :doc/docString "The MeasurementResultsSet element is a set of collections\n            of measurement results."}
+             {:sp/name "ActualComponentSets",
+              :sp/minOccurs :0,
+              :sp/function #:fn{:type :gelem},
+              :doc/docString
+              "The optional ActualComponentSets element is a collection\n            of data associated with the actual components of one or\n            more manufactured products."}
+             {:sp/name "InspectionTraceability",
+              :sp/type "InspectionTraceabilityType",
+              :sp/minOccurs :0,
+              :sp/function #:fn{:type :gelem},
+              :doc/docString
+              "The optional InspectionTraceability element gives traceability\n            information that applies to all measurement results."}],
+            :sp/name "ResultsType",
+            :doc/docString "The ResultsType is the top level type for QIF measurement results."}
+           {:model/sequence
+            [#:model{:sequence
+                     [{:sp/name "ActualComponentSet",
+                       :sp/maxOccurs :unbounded,
+                       :sp/function #:fn{:type :gelem},
+                       :doc/docString "Each ActualComponentSet element is an actual component set."}]}
+             {:sp/xsdType :attribute,
+              :doc/docString "The required n attribute is the number of actual component sets\n          in this list."}],
+            :sp/name "ActualComponentSetsType",
+            :doc/docString
+            "The ActualComponentSetsType describes a container for storing a\n        list of actual component sets. Each instance of a product can have\n        multiple actual components. This type collects such information\n        over multiple instances of a product."}
+           {:model/sequence
+            [#:model{:sequence
+                     [{:sp/name "ActualComponent",
+                       :sp/maxOccurs :unbounded,
+                       :sp/function #:fn{:type :gelem},
+                       :doc/docString "Each ActualComponent element is an actual component."}]}
+             {:sp/xsdType :attribute,
+              :doc/docString "The required n attribute is the number of actual components in\n          this set."}],
+            :sp/name "ActualComponentSetType",
+            :doc/docString "The ActualComponentSetType describes the container for\n        storing data of actual components."}
+           {:model/sequence
+            [#:model{:sequence
+                     [{:sp/name "Attributes",
+                       :sp/minOccurs :0,
+                       :sp/function #:fn{:type :gelem},
+                       :doc/docString
+                       "The optional Attributes element contains user defined\n            attributes (typified, binary array, or XML structured)."}
+                      {:sp/name "SerialNumber",
+                       :sp/type "xs:string",
+                       :sp/minOccurs :0,
+                       :sp/function #:fn{:type :gelem},
+                       :doc/docString
+                       "The optional SerialNumber element is a label of a specific\n            actual component of a given type. Components with the same\n            ModelNumber have different SerialNumbers. The combination of\n            ModelNumber and SerialNumber should differentiate a given\n            actual component from all other actual components in a QIF\n            application instance file."}
+                      {:sp/name "AdditionalChanges",
+                       :sp/type "xs:string",
+                       :sp/minOccurs :0,
+                       :sp/function #:fn{:type :gelem},
+                       :doc/docString
+                       "The optional AdditionalChanges element is a record of any\n            changes to the product beyond what is recorded in the product\n            model. The information recorded here may be used for the\n            Additional Changes field of an AS9102A form."}
+                      {:sp/name "Status",
+                       :sp/type "InspectionStatusType",
+                       :sp/function #:fn{:type :gelem},
+                       :doc/docString "The Status element gives the inspection status of the actual\n            component."}
+                      {:sp/name "Traceability",
+                       :sp/type "ActualProductTraceabilityType",
+                       :sp/minOccurs :0,
+                       :sp/function #:fn{:type :gelem},
+                       :doc/docString
+                       "The optional Traceability element gives traceability\n            information for an actual component."}
+                      {:sp/name "AsmPathId",
+                       :sp/type "QIFReferenceType",
+                       :sp/minOccurs :0,
+                       :sp/function #:fn{:type :gelem},
+                       :doc/docString "The optional AsmPathId element is the id of the assembly path\n            of this component."}]}
+             {:sp/xsdType :attribute,
+              :doc/docString "The id attribute is the QIF id of the actual component data, used\n          for referencing."}],
+            :sp/name "ActualComponentType",
+            :doc/docString "The ActualComponentType defines data of an actual component."}],
+          :version "3"}]

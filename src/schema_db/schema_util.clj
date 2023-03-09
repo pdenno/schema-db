@@ -8,11 +8,15 @@
    [taoensso.timbre              :as log]))
 
 (def simple-xsd?
-  {:xsd/minLength      :number
+  {:xsd/length         :number
+   :xsd/minLength      :number
    :xsd/maxLength      :number
    :xsd/pattern        :string
    :xsd/fractionDigits :number
    :xsd/totalDigits    :number
+   :xsd/maxExclusive   :number
+   :xsd/maxInclusive   :number
+   :xsd/minExclusive   :number
    :xsd/minInclusive   :number})
 
 (def generic-schema-type? "These might be associated with whole files, but specializations might exist"
@@ -45,7 +49,7 @@
                (and (= stype :ccts/message-schema)    (= schema-sdo :oagi))   :oagis/message-schema,
                (and (= stype :ccts/component-schema)  (= schema-sdo :oagi))   :generic/qualified-dtype-schema,
                (and (= stype :ccts/component-schema)  (= schema-sdo :oasis))  :oasis/component-schema,
-               (and (= stype :generic/message-schema) (= schema-sdo :qif))    :generic/xsd-file, ; ToDo: Probably temporary.
+               (and (= stype :generic/message-schema) (= schema-sdo :qif))    :generic/xsd-file,
 
                (special-schema-type? stype) stype,
                (generic-schema-type? stype) stype,
@@ -229,9 +233,9 @@
   "Return a keyword signifying the specification of which the schema is part.
    These are #{:ubl-2, :oagis-10, etc.}. It is used as :schema/spec"
   [xmap]
-  (let [sdo (:schema/sdo xmap)
-        pname (:schema/pathname xmap)
-        ns  (schema-ns xmap)]
+  (let [ns (schema-ns xmap)
+        sdo (:schema/sdo xmap)
+        pname (:schema/pathname xmap)]
     (case sdo
       :cefact
       (cond (= ns "urn:un:unece:uncefact:data:specification:CoreComponentTypeSchemaModule:2")
@@ -297,12 +301,14 @@
                     (str "urn:oagis-" ver-str ":" res-pname))
                 (do (log/warn "Could not determine OAGIS" ver-str "schema name.")
                     :mm/nil)))))),
+
         (= :qif sdo)
-      (if-let [[_ fname] (re-matches #".*/QIFLibrary/(\w+).xsd" pname)]
-        (str "urn:QIF-" ver-str ":Library:" fname)
-        (if-let [[_ fname] (re-matches #".*/QIFApplications/(\w+).xsd" pname)]
-          (str "urn:QIF-" ver-str ":Application:" fname)
+        (if-let [[_ fname] (re-matches #".*/QIFLibrary/(\w+).xsd" pname)]
+          (str "urn:QIF-" ver-str ":Library:" fname)
+          (if-let [[_ fname] (re-matches #".*/QIFApplications/(\w+).xsd" pname)]
+            (str "urn:QIF-" ver-str ":Application:" fname)
             (do (log/warn "Could not determine QIF" ver-str "schema name.") :mm/nil)))
+
       (#{:oasis :cefact :iso :etsi} sdo)
       (if-let [name (schema-ns xmap)]
         name

@@ -1,0 +1,71 @@
+[{:schema/subversion "3",
+  :model/sequence [#:sp{:name "Invoice", :type "InvoiceType", :function #:fn{:type :gelem}}],
+  :schema/pathname "/opt/messaging/sources/OASIS/UBL-2.3/xsdrt/maindoc/UBL-Invoice-2.3.xsd",
+  :schema/importedSchemas
+  [#:import{:prefix "cac", :referencedSchema "urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2"}
+   #:import{:prefix "cbc", :referencedSchema "urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2"}
+   #:import{:prefix "ext", :referencedSchema "urn:oasis:names:specification:ubl:schema:xsd:CommonExtensionComponents-2"}],
+  :schema/inlinedTypedefs
+  [{:sp/type "InvoiceType",
+    :sp/function #:fn{:type :sequence},
+    :model/sequence
+    [#:sp{:name "ext:UBLExtensions", :minOccurs :0, :maxOccurs :1, :function #:fn{:type :gelem}}
+     #:sp{:name "cbc:UBLVersionID", :minOccurs :0, :maxOccurs :1, :function #:fn{:type :gelem}}
+     #:sp{:name "cbc:CustomizationID", :minOccurs :0, :maxOccurs :1, :function #:fn{:type :gelem}}
+     #:sp{:name "cbc:ProfileID", :minOccurs :0, :maxOccurs :1, :function #:fn{:type :gelem}}
+     #:sp{:name "cbc:ProfileExecutionID", :minOccurs :0, :maxOccurs :1, :function #:fn{:type :gelem}}
+     #:sp{:name "cbc:ID", :minOccurs :1, :maxOccurs :1, :function #:fn{:type :gelem}}
+     #:sp{:name "cbc:CopyIndicator", :minOccurs :0, :maxOccurs :1, :function #:fn{:type :gelem}}
+     #:sp{:name "cbc:UUID", :minOccurs :0, :maxOccurs :1, :function #:fn{:type :gelem}}
+     #:sp{:name "cbc:IssueDate", :minOccurs :1, :maxOccurs :1, :function #:fn{:type :gelem}}
+     #:sp{:name "cbc:IssueTime", :minOccurs :0, :maxOccurs :1, :function #:fn{:type :gelem}}
+     #:sp{:name "cbc:DueDate", :minOccurs :0, :maxOccurs :1, :function #:fn{:type :gelem}}
+     #:sp{:name "cbc:InvoiceTypeCode", :minOccurs :0, :maxOccurs :1, :function #:fn{:type :gelem}}
+     #:sp{:name "cbc:Note", :minOccurs :0, :maxOccurs :unbounded, :function #:fn{:type :gelem}}
+     #:sp{:name "cbc:TaxPointDate", :minOccurs :0, :maxOccurs :1, :function #:fn{:type :gelem}}
+     #:sp{:name "cbc:DocumentCurrencyCode", :minOccurs :0, :maxOccurs :1, :function #:fn{:type :gelem}}
+     #:sp{:name "cbc:TaxCurrencyCode", :minOccurs :0, :maxOccurs :1, :function #:fn{:type :gelem}}
+     #:sp{:name "cbc:PricingCurrencyCode", :minOccurs :0, :maxOccurs :1, :function #:fn{:type :gelem}}
+     #:sp{:name "cbc:PaymentCurrencyCode", :minOccurs :0, :maxOccurs :1, :function #:fn{:type :gelem}}
+     #:sp{:name "cbc:PaymentAlternativeCurrencyCode", :minOccurs :0, :maxOccurs :1, :function #:fn{:type :gelem}}
+     #:sp{:name "cbc:AccountingCostCode", :minOccurs :0, :maxOccurs :1, :function #:fn{:type :gelem}}
+     #:sp{:name "cbc:AccountingCost", :minOccurs :0, :maxOccurs :1, :function #:fn{:type :gelem}}
+     #:sp{:name "cbc:LineCountNumeric", :minOccurs :0, :maxOccurs :1, :function #:fn{:type :gelem}}
+     #:sp{:name "cbc:BuyerReference", :minOccurs :0, :maxOccurs :1, :function #:fn{:type :gelem}}
+     #:sp{:name "cac:InvoicePeriod", :minOccurs :0, :maxOccurs :unbounded, :function #:fn{:type :gelem}}
+     #:sp{:name "cac:OrderReference", :minOccurs :0, :maxOccurs :1, :function #:fn{:type :gelem}}
+     #:sp{:name "cac:BillingReference", :minOccurs :0, :maxOccurs :unbounded, :function #:fn{:type :gelem}}
+     #:sp{:name "cac:DespatchDocumentReference", :minOccurs :0, :maxOccurs :unbounded, :function #:fn{:type :gelem}}
+     #:sp{:name "cac:ReceiptDocumentReference", :minOccurs :0, :maxOccurs :unbounded, :function #:fn{:type :gelem}}
+     #:sp{:name "cac:StatementDocumentReference", :minOccurs :0, :maxOccurs :unbounded, :function #:fn{:type :gelem}}
+     #:sp{:name "cac:OriginatorDocumentReference", :minOccurs :0, :maxOccurs :unbounded, :function #:fn{:type :gelem}}
+     #:sp{:name "cac:ContractDocumentReference", :minOccurs :0, :maxOccurs :unbounded, :function #:fn{:type :gelem}}
+     #:sp{:name "cac:AdditionalDocumentReference", :minOccurs :0, :maxOccurs :unbounded, :function #:fn{:type :gelem}}
+     #:sp{:name "cac:ProjectReference", :minOccurs :0, :maxOccurs :unbounded, :function #:fn{:type :gelem}}
+     #:sp{:name "cac:Signature", :minOccurs :0, :maxOccurs :unbounded, :function #:fn{:type :gelem}}
+     #:sp{:name "cac:AccountingSupplierParty", :minOccurs :1, :maxOccurs :1, :function #:fn{:type :gelem}}
+     #:sp{:name "cac:AccountingCustomerParty", :minOccurs :0, :maxOccurs :1, :function #:fn{:type :gelem}}
+     #:sp{:name "cac:PayeeParty", :minOccurs :0, :maxOccurs :1, :function #:fn{:type :gelem}}
+     #:sp{:name "cac:BuyerCustomerParty", :minOccurs :0, :maxOccurs :1, :function #:fn{:type :gelem}}
+     #:sp{:name "cac:SellerSupplierParty", :minOccurs :0, :maxOccurs :1, :function #:fn{:type :gelem}}
+     #:sp{:name "cac:TaxRepresentativeParty", :minOccurs :0, :maxOccurs :1, :function #:fn{:type :gelem}}
+     #:sp{:name "cac:Delivery", :minOccurs :0, :maxOccurs :unbounded, :function #:fn{:type :gelem}}
+     #:sp{:name "cac:DeliveryTerms", :minOccurs :0, :maxOccurs :1, :function #:fn{:type :gelem}}
+     #:sp{:name "cac:PaymentMeans", :minOccurs :0, :maxOccurs :unbounded, :function #:fn{:type :gelem}}
+     #:sp{:name "cac:PaymentTerms", :minOccurs :0, :maxOccurs :unbounded, :function #:fn{:type :gelem}}
+     #:sp{:name "cac:PrepaidPayment", :minOccurs :0, :maxOccurs :unbounded, :function #:fn{:type :gelem}}
+     #:sp{:name "cac:AllowanceCharge", :minOccurs :0, :maxOccurs :unbounded, :function #:fn{:type :gelem}}
+     #:sp{:name "cac:TaxExchangeRate", :minOccurs :0, :maxOccurs :1, :function #:fn{:type :gelem}}
+     #:sp{:name "cac:PricingExchangeRate", :minOccurs :0, :maxOccurs :1, :function #:fn{:type :gelem}}
+     #:sp{:name "cac:PaymentExchangeRate", :minOccurs :0, :maxOccurs :1, :function #:fn{:type :gelem}}
+     #:sp{:name "cac:PaymentAlternativeExchangeRate", :minOccurs :0, :maxOccurs :1, :function #:fn{:type :gelem}}
+     #:sp{:name "cac:TaxTotal", :minOccurs :0, :maxOccurs :unbounded, :function #:fn{:type :gelem}}
+     #:sp{:name "cac:WithholdingTaxTotal", :minOccurs :0, :maxOccurs :unbounded, :function #:fn{:type :gelem}}
+     #:sp{:name "cac:LegalMonetaryTotal", :minOccurs :1, :maxOccurs :1, :function #:fn{:type :gelem}}
+     #:sp{:name "cac:InvoiceLine", :minOccurs :1, :maxOccurs :unbounded, :function #:fn{:type :gelem}}]}],
+  :schema/sdo :oasis,
+  :schema/type :ccts/message-schema,
+  :schema/name "urn:oasis:names:specification:ubl:schema:xsd:Invoice-2",
+  :schema/shortName "Invoice",
+  :schema/spec :ubl,
+  :schema/version "2"}]

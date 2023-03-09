@@ -1,0 +1,338 @@
+[{:schema/subversion "8.4",
+  :model/sequence
+  [#:sp{:name "InvoiceHeader",
+        :type "InvoiceHeaderType",
+        :docString
+        "Information that applies to the entire invoice document. The Header supports summary amounts for line items, charges, taxes and allowances.\n\nIt also supports itemizing Header level charges, taxes and allowances for use in credit or debit invoices. In this case Line items are not needed. \n\nThe summary amounts in the Header include the Line level amounts and Header level amounts.",
+        :function #:fn{:type :gelem}}],
+  :schema/pathname "/opt/messaging/sources/OAGIS/10.8.4/ModuleSet/Model/Nouns/Invoice.xsd",
+  :sp/typeRef
+  [#:sp{:name "InvoiceHeader",
+        :type "InvoiceHeaderType",
+        :docString
+        "Information that applies to the entire invoice document. The Header supports summary amounts for line items, charges, taxes and allowances.\n\nIt also supports itemizing Header level charges, taxes and allowances for use in credit or debit invoices. In this case Line items are not needed. \n\nThe summary amounts in the Header include the Line level amounts and Header level amounts.",
+        :function #:fn{:type :type-ref}}
+   #:sp{:name "InvoiceSubLine",
+        :type "InvoiceSubLineType",
+        :docString "Is a SubLine of the InvoiceLine in order to provide a finer grained breakdown of the items being invoiced.",
+        :function #:fn{:type :type-ref}}
+   #:sp{:name "InvoiceLine",
+        :type "InvoiceLineType",
+        :docString
+        "In general an Invoice Line can be aligned with Order Lines. The ItemQuantity and Price are used to compute the Total. The Total is a sum of the Total and any Charges, Taxes or Allowances.",
+        :function #:fn{:type :type-ref}}
+   #:sp{:name "Invoice",
+        :type "InvoiceType",
+        :docString "The Invoice is used to invoice a customer for goods/services the have been provided.",
+        :function #:fn{:type :type-ref}}],
+  :schema/inlinedTypedefs
+  [{:sp/type "InvoiceType",
+    :sp/function #:fn{:type :sequence},
+    :model/sequence
+    [#:sp{:name "InvoiceHeader",
+          :minOccurs :0,
+          :maxOccurs :1,
+          :docString
+          "Information that applies to the entire invoice document. The Header supports summary amounts for line items, charges, taxes and allowances.\n\nIt also supports itemizing Header level charges, taxes and allowances for use in credit or debit invoices. In this case Line items are not needed. \n\nThe summary amounts in the Header include the Line level amounts and Header level amounts.",
+          :function #:fn{:type :gelem}}
+     #:sp{:name "InvoiceLine",
+          :minOccurs :0,
+          :maxOccurs :unbounded,
+          :docString
+          "In general an Invoice Line can be aligned with Order Lines. The ItemQuantity and Price are used to compute the Total. The Total is a sum of the Total and any Charges, Taxes or Allowances.",
+          :function #:fn{:type :gelem}}]}
+   {:sp/type "InvoiceHeaderBaseType",
+    :sp/function #:fn{:type :extension, :base "StatusHeaderBaseType"},
+    :model/sequence
+    [#:sp{:name "ExtendedAmount",
+          :minOccurs :0,
+          :maxOccurs :1,
+          :docString
+          "Is an amount not including taxes or charges. In the case of orders, this is typically the Unit Price times the Order Quantity.",
+          :function #:fn{:type :gelem}}
+     #:sp{:name "TotalAmount",
+          :minOccurs :0,
+          :maxOccurs :unbounded,
+          :docString
+          "Indicates the total amount of the object associated. This includes the Price and the total of all the charges, allowances and taxes.\nIncluded various type of totals including tax, discount, and charges",
+          :function #:fn{:type :gelem}}
+     #:sp{:name "AmountDiscount", :minOccurs :0, :maxOccurs :unbounded, :function #:fn{:type :gelem}}
+     #:sp{:name "SupplierParty",
+          :minOccurs :0,
+          :maxOccurs :1,
+          :docString
+          "Identifies the supplier organization/entity of the items or inventory for the associated transaction.\n\nIn most cases there is one SupplierParty per transaction. i.e. one SupplierParty for a given PurchaseOrder. However in the cases where an transaction Broker is involved there are cases where a single transaction may have different SupplierParties at the line level or in the case of a Catalog for the Catalog.",
+          :function #:fn{:type :gelem}}
+     #:sp{:name "CustomerParty",
+          :minOccurs :0,
+          :maxOccurs :1,
+          :docString "Is the organization that is the end customer of the goods or services being provided in the associated transaction.",
+          :function #:fn{:type :gelem}}
+     #:sp{:name "RemitToParty",
+          :minOccurs :0,
+          :maxOccurs :1,
+          :docString "Identifies the party or location that the payment is to be remitted to or sent to.",
+          :function #:fn{:type :gelem}}
+     #:sp{:name "ShipToParty",
+          :minOccurs :0,
+          :maxOccurs :unbounded,
+          :docString
+          "Identifies the ShipToParty for the document or the line. In a lot of cases, this is the same as the CustomerParty. In multi-organization purchasing, the CustomerParty may be different from the BuyerParty",
+          :function #:fn{:type :gelem}}
+     #:sp{:name "CarrierParty",
+          :minOccurs :0,
+          :maxOccurs :unbounded,
+          :docString "Idenitfies the party that serves as the carrier of the goods or services for the transaction.",
+          :function #:fn{:type :gelem}}
+     #:sp{:name "BillToParty",
+          :minOccurs :0,
+          :maxOccurs :unbounded,
+          :docString
+          "Identifies the party that the bill or invoice is to be sent. In most cases this is the same as the CustomerParty however there are many cases where the CustomerParty and the BillToParty will be different.",
+          :function #:fn{:type :gelem}}
+     #:sp{:name "ShipFromParty",
+          :minOccurs :0,
+          :maxOccurs :unbounded,
+          :docString "Identifies the party that the goods or services are being shipped or sent from.",
+          :function #:fn{:type :gelem}}
+     #:sp{:name "Party",
+          :minOccurs :0,
+          :maxOccurs :unbounded,
+          :docString
+          "A generic Party  for non-validated or application-validated parties. A work-around for situations where Schema-validation of Parties is not feasible or not desired.",
+          :function #:fn{:type :gelem}}
+     #:sp{:name "ReasonCode",
+          :minOccurs :0,
+          :maxOccurs :1,
+          :docString "Identifies the reason for an activity",
+          :function #:fn{:type :gelem}}
+     #:sp{:name "PurchaseOrderReference",
+          :minOccurs :0,
+          :maxOccurs :unbounded,
+          :docString "Is a reference to a PurchaseOrder",
+          :function #:fn{:type :gelem}}
+     #:sp{:name "ContractReference",
+          :minOccurs :0,
+          :maxOccurs :unbounded,
+          :docString "Is a reference to a contract",
+          :function #:fn{:type :gelem}}
+     #:sp{:name "PaymentTerm",
+          :minOccurs :0,
+          :maxOccurs :unbounded,
+          :docString
+          "Identifies the payment term for an Order or Invoice. Supports the abiility to specify an absolute due date, a number of days from a start daye, a percent discount or an absolute discount. A common term like \"Net30Days\" is explicitly code as either a calculated DueDateTime or a PaymentTermsDateTime and NumberOfDays.",
+          :function #:fn{:type :gelem}}
+     #:sp{:name "Payment", :minOccurs :0, :maxOccurs :1, :function #:fn{:type :gelem}}
+     #:sp{:name "CustomerCredit",
+          :minOccurs :0,
+          :maxOccurs :1,
+          :docString "To provide the customer details such as prepaid amounts and the balance.",
+          :function #:fn{:type :gelem}}
+     #:sp{:name "Tax",
+          :minOccurs :0,
+          :maxOccurs :unbounded,
+          :docString "Indicates the tax for the object associated.",
+          :function #:fn{:type :gelem}}
+     #:sp{:name "DistributeCharge", :minOccurs :0, :maxOccurs :unbounded, :function #:fn{:type :gelem}}
+     #:sp{:name "DistributeTax", :minOccurs :0, :maxOccurs :unbounded, :function #:fn{:type :gelem}}
+     #:sp{:name "Distribution",
+          :minOccurs :0,
+          :maxOccurs :unbounded,
+          :docString
+          "The accounting distribution information associated with a Business Object Document. The position of the Distribution within a Business Object Document provides the context and additional meaning.",
+          :function #:fn{:type :gelem}}
+     #:sp{:name "Charge",
+          :minOccurs :0,
+          :maxOccurs :unbounded,
+          :docString "Represents the different Charges that may be applied to the associated document.",
+          :function #:fn{:type :gelem}}
+     #:sp{:name "TotalChargeAmount",
+          :minOccurs :0,
+          :maxOccurs :1,
+          :docString "sum of all the charges on an invoice",
+          :function #:fn{:type :gelem}}
+     #:sp{:name "Allowance",
+          :minOccurs :0,
+          :maxOccurs :unbounded,
+          :docString
+          "Identifies the discount or allowance that the Customer is to receive off of the TotalAmount owed as a result of the associated document or sub-portion of a document.",
+          :function #:fn{:type :gelem}}
+     #:sp{:name "TotalAllowanceAmount",
+          :minOccurs :0,
+          :maxOccurs :1,
+          :docString "the sum of all the allowances detailed on an invoice",
+          :function #:fn{:type :gelem}}
+     #:sp{:name "TransportationMethodCode",
+          :minOccurs :0,
+          :maxOccurs :1,
+          :docString "Identifies the general type of carrier transportation used to deliver goods.",
+          :function #:fn{:type :gelem}}
+     #:sp{:name "TransportationTerm",
+          :minOccurs :0,
+          :maxOccurs :unbounded,
+          :docString
+          "When a seller ships something via common to a buyer in accordance with the Uniform Commerical Code and international legal agreements, you must specify a particular \"phrase\" that states who assumes the risk of shipment, who is responsible for loading and unloading the goods, where ownership or title to the goods passes, who paid or pays the carrirer, etc. Examples of these \"phrases\" include: - \"FOB Origin Prepaid and Add\" (Free On Board - no cost for loading, title passes at seller's dock, seller prepaid freight cost and delivery insurance, seller will freight costs to cost of goods) - \"FOB Destination\" or \"FOB Destination Prepaid\" (Free On Board - no cost for loading, title passes at buyer's dock, seller prepaid freight cost and delivery insurance)  In software applications, this phrase is commonly split into two coded pieces, a \"legal terms\" risk and responsibility component for use with common carriers (FOB Destination) and some kind of qualifying component (Prepaid and Add).",
+          :function #:fn{:type :gelem}}
+     #:sp{:name "Event", :minOccurs :0, :maxOccurs :unbounded, :function #:fn{:type :gelem}}
+     #:sp{:name "ShipmentReference",
+          :minOccurs :0,
+          :maxOccurs :1,
+          :docString
+          "Used when matching is required by shipment identifier.  Communicates the requested ship date and the actual ship date, if the customer is grading the supplier's performance.",
+          :function #:fn{:type :gelem}}
+     #:sp{:name "RequestedDeliveryDate",
+          :minOccurs :0,
+          :maxOccurs :1,
+          :docString "Date shipment was originally requested to be delivered.",
+          :function #:fn{:type :gelem}}
+     #:sp{:name "ActualDeliveryDateTime",
+          :minOccurs :0,
+          :maxOccurs :unbounded,
+          :docString "Date shipment was actually delivered/ received.",
+          :function #:fn{:type :gelem}}
+     #:sp{:name "RemittanceInstructions",
+          :minOccurs :0,
+          :maxOccurs :unbounded,
+          :docString "Indicates how to send remittance information once the payment has been made.  Could be sent in various forms.",
+          :function #:fn{:type :gelem}}]}
+   {:sp/type "InvoiceHeaderType",
+    :sp/function #:fn{:type :extension, :base "InvoiceHeaderBaseType"},
+    :model/sequence
+    [#:sp{:name "Extension",
+          :type "InvoiceHeaderExtensionType",
+          :minOccurs :0,
+          :maxOccurs :unbounded,
+          :docString
+          "Allows the user of OAGIS to extend the specification in order to provide additional information that is not captured in OAGIS.",
+          :function #:fn{:type :gelem}}]}
+   {:sp/type "InvoiceLineSubLineBaseType",
+    :sp/function #:fn{:type :extension, :base "StatusLineBaseType"},
+    :model/sequence
+    [#:sp{:name "Item",
+          :minOccurs :0,
+          :maxOccurs :1,
+          :docString
+          "Identifies the Item associated with the Line or Detail of a transaction. The item provides the details of the generic Item component information.",
+          :function #:fn{:type :gelem}}
+     #:sp{:name "ItemInstance", :minOccurs :0, :maxOccurs :unbounded, :function #:fn{:type :gelem}}
+     #:sp{:name "Quantity",
+          :minOccurs :0,
+          :maxOccurs :unbounded,
+          :docString
+          "Identifies the quantity of the associated service or item that is addresses by the component in which the quantity is associated.",
+          :function #:fn{:type :gelem}}
+     #:sp{:name "UnitPrice",
+          :minOccurs :0,
+          :maxOccurs :1,
+          :docString
+          "Unit price of the item for the number of items in the unitCode specified in the PerQuantity elements.\n\nIn most cases the unitCode of the PerQuantity is the same as the unitCode of the Quantity element above.",
+          :function #:fn{:type :gelem}}
+     #:sp{:name "PurchaseOrderReference",
+          :minOccurs :0,
+          :maxOccurs :unbounded,
+          :docString "Is a reference to a PurchaseOrder",
+          :function #:fn{:type :gelem}}
+     #:sp{:name "BuyerParty", :minOccurs :0, :maxOccurs :1, :function #:fn{:type :gelem}}
+     #:sp{:name "Party",
+          :minOccurs :0,
+          :maxOccurs :unbounded,
+          :docString
+          "A generic Party  for non-validated or application-validated parties. A work-around for situations where Schema-validation of Parties is not feasible or not desired.",
+          :function #:fn{:type :gelem}}
+     #:sp{:name "ContractReference",
+          :minOccurs :0,
+          :maxOccurs :unbounded,
+          :docString "Is a reference to a contract",
+          :function #:fn{:type :gelem}}
+     #:sp{:name "ExtendedAmount",
+          :minOccurs :0,
+          :maxOccurs :1,
+          :docString
+          "Is an amount not including taxes or charges. In the case of orders, this is typically the Unit Price times the Order Quantity.",
+          :function #:fn{:type :gelem}}
+     #:sp{:name "TotalAmount",
+          :minOccurs :0,
+          :maxOccurs :1,
+          :docString
+          "Indicates the total amount of the object associated. This includes the Price and the total of all the charges, allowances and taxes.",
+          :function #:fn{:type :gelem}}
+     #:sp{:name "AmountDiscount", :minOccurs :0, :maxOccurs :unbounded, :function #:fn{:type :gelem}}
+     #:sp{:name "OpenItemIndicator",
+          :minOccurs :0,
+          :maxOccurs :1,
+          :docString "Indicates that the line is an open item and is not to be included in the document total.",
+          :function #:fn{:type :gelem}}
+     #:sp{:name "Tax",
+          :minOccurs :0,
+          :maxOccurs :unbounded,
+          :docString "Indicates the tax for the object associated.",
+          :function #:fn{:type :gelem}}
+     #:sp{:name "DistributeCharge", :minOccurs :0, :maxOccurs :unbounded, :function #:fn{:type :gelem}}
+     #:sp{:name "DistributeTax", :minOccurs :0, :maxOccurs :unbounded, :function #:fn{:type :gelem}}
+     #:sp{:name "Distribution",
+          :minOccurs :0,
+          :maxOccurs :unbounded,
+          :docString
+          "The accounting distribution information associated with a Business Object Document. The position of the Distribution within a Business Object Document provides the context and additional meaning.",
+          :function #:fn{:type :gelem}}
+     #:sp{:name "InvoiceCharge", :minOccurs :0, :maxOccurs :unbounded, :function #:fn{:type :gelem}}
+     #:sp{:name "InvoiceAllowance", :minOccurs :0, :maxOccurs :unbounded, :function #:fn{:type :gelem}}
+     #:sp{:name "GoodsReceiptDateTime",
+          :minOccurs :0,
+          :maxOccurs :1,
+          :docString "A datetime specifying a goods receipt.",
+          :function #:fn{:type :gelem}}
+     #:sp{:name "ServicesReceiptDateTime",
+          :minOccurs :0,
+          :maxOccurs :1,
+          :docString "A datetime specifying a services receipt.",
+          :function #:fn{:type :gelem}}]}
+   {:sp/type "InvoiceLineBaseType",
+    :sp/function #:fn{:type :extension, :base "InvoiceLineSubLineBaseType"},
+    :model/sequence
+    [#:sp{:name "InvoiceSubLine", :minOccurs :0, :maxOccurs :unbounded, :function #:fn{:type :gelem}}
+     #:sp{:name "RequestedDeliveryDate",
+          :minOccurs :0,
+          :maxOccurs :1,
+          :docString "date the product was requested to be delivered, used when there is a SLA agreement for on-time delivery",
+          :function #:fn{:type :gelem}}
+     #:sp{:name "ActualDeliveryDateTime",
+          :minOccurs :0,
+          :maxOccurs :1,
+          :docString "date the product was actually delivered, used when there is a SLA agreement for on-time delivery",
+          :function #:fn{:type :gelem}}
+     #:sp{:name "ShipmentReference",
+          :minOccurs :0,
+          :maxOccurs :1,
+          :docString
+          "Used when matching is required by shipment identifier, for consolidated invoices where one shipment is reference per line, and not subline (disallowed).",
+          :function #:fn{:type :gelem}}]}
+   {:sp/type "InvoiceSubLineBaseType",
+    :sp/function #:fn{:type :extension, :base "InvoiceLineSubLineBaseType"},
+    :model/sequence [#:sp{:name "HeatReference", :minOccurs :0, :maxOccurs :unbounded, :function #:fn{:type :gelem}}]}
+   {:sp/type "InvoiceSubLineType",
+    :sp/function #:fn{:type :extension, :base "InvoiceSubLineBaseType"},
+    :model/sequence
+    [#:sp{:name "Extension",
+          :type "InvoiceSubLineExtensionType",
+          :minOccurs :0,
+          :maxOccurs :unbounded,
+          :docString
+          "Allows the user of OAGIS to extend the specification in order to provide additional information that is not captured in OAGIS.",
+          :function #:fn{:type :gelem}}]}
+   {:sp/type "InvoiceLineType",
+    :sp/function #:fn{:type :extension, :base "InvoiceLineBaseType"},
+    :model/sequence
+    [#:sp{:name "Extension",
+          :type "InvoiceLineExtensionType",
+          :minOccurs :0,
+          :maxOccurs :unbounded,
+          :docString
+          "Allows the user of OAGIS to extend the specification in order to provide additional information that is not captured in OAGIS.",
+          :function #:fn{:type :gelem}}]}],
+  :schema/sdo :oagi,
+  :schema/type :ccts/message-schema,
+  :schema/name "urn:oagis-10.8.4:Nouns:Invoice",
+  :schema/spec :oagis,
+  :mm/tempInclude ["../Platform/2_7/Common/Components/Components.xsd"],
+  :schema/version "10"}]

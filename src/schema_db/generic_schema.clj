@@ -232,3 +232,26 @@
   (let [cnt (:xml/content obj)
         m (if cnt (rewrite-xsd cnt :extend-restrict-content) {})]
     (assoc m :sp/function {:fn/type :restriction :fn/base (-> obj :xml/attrs :base)})))
+
+(defparse :xsd/list
+  [obj]
+  {:xsd/listItemType (-> obj :xml/attrs :itemType str)})
+
+(defparse :simple-xsd
+  [obj]
+  (let [tag (:xml/tag obj)]
+    {tag
+     (if (= :number (simple-xsd? tag))
+       (-> obj :xml/attrs :value read-string)
+       (-> obj :xml/attrs :value))}))
+
+(defparse :extend-restrict-content
+  [content]
+  (let [enums (atom [])
+        result (mapv #(if (xml-type? % :xsd/enumeration)
+                        (swap! enums conj (-> % :xml/attrs :value))
+                        (rewrite-xsd %))
+                     content)]
+    (if (not-empty @enums)
+      {:model/enumeration @enums},
+      {:model/sequence result})))

@@ -1,9 +1,8 @@
-(ns rad-mapper.data-util.generic-schema-test
+(ns schema-db.generic-schema-test
   "Functions to read XML to structures that the DB can use."
   (:require
    [clojure.test :refer [deftest is testing]]
-   [rad-mapper.data-util.generic-schema :as gen-s]
-   [rad-mapper.builtin :as bi]))
+   [schema-db.generic-schema :as gen-s]))
 
 (def invoice-A
 "<?xml version=\"1.0\" encoding=\"UTF-8\"?>

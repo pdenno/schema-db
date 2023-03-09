@@ -8,7 +8,8 @@
    ;[com.wsscode.pathom3.interface.eql :as p.eql]
    [datahike.api        :as d]
    [datahike.pull-api   :as dp]
-   [schema-db.db-util :as du]))
+   [schema-db.core      :as core :refer [connect-db]]
+   [schema-db.db-util   :as du]))
 
 ;;;============================ Resolvers (communication with clients)  ==================================
 ;;; I think the key idea here for pathom-mediated composabiltiy is for each resolver to rename all db/id
@@ -20,23 +21,23 @@
 
 ;;; Note that when you send an Ident, you get back a map with that ident and the response <=========
 ;;; (pathom-resolve [{[:schema/name "urn:oasis:names:specification:ubl:schema:xsd:Invoice-2"] [:sdb/schema-id]}])
-;;; (pathom-resolve [{[:schema/name "urn:oagis-10.8:Nouns:Invoice"] [:sdb/schema-id]}])
+;;; (pathom-resolve [{[:schema/name "urn:oagis-10.8.4:Nouns:Invoice"] [:sdb/schema-id]}])
 ;;; ==> {[:schema/name "urn:oasis:names:specification:ubl:schema:xsd:Invoice-2"] #:sdb{:schema-id 1230}}
-(pc/defresolver schema-by-name-r [env {:schema/keys [name]}]
+(pc/defresolver schema-name->sdb-schema-id [env {:schema/keys [name]}]
   {::pc/input #{:schema/name}
    ::pc/output [:sdb/schema-id]}
   {:sdb/schema-id (d/q `[:find ?e . :where [?e :schema/name ~name]] @du/conn)})
 
-;;; (pathom-resolve [{[:schema/name "urn:oagis-10.8:Nouns:Invoice"] [:sdb/schema-object]}])
-;;; [{"schema/name" : "urn:oagis-10.8:Nouns:Invoice"}, ["schema-object"]]
-(pc/defresolver full-schema-r [env {:sdb/keys [schema-id]}]
+;;; (pathom-resolve [{[:schema/name "urn:oagis-10.8.4:Nouns:Invoice"] [:sdb/schema-object]}])
+;;; [{"schema/name" : "urn:oagis-10.8.4:Nouns:Invoice"}, ["schema-object"]]
+(pc/defresolver sdb-schema-id->schema-obj [env {:sdb/keys [schema-id]}]
   {::pc/input #{:sdb/schema-id}
    ::pc/output [:sdb/schema-object]}
    {:sdb/schema-object (du/resolve-db-id {:db/id schema-id} du/conn #{:db/id})})
 
 ;;; (pathom-resolve [{:ccts/message-schema [:list/id  {:list/schemas [:sdb/schema-id :schema/name]}]}]) ; RIGHT!
 ;;; (pathom-resolve [{[:list/id :ccts/message-schema] {:list/schemas [:sdb/schema-id :schema/name]}}])  ; WRONG! WHY?
-(pc/defresolver list-r [env {:list/keys [id]}] ; e.g :list/id = :ccts/message-schema
+(pc/defresolver list-id->list-schemas [env {:list/keys [id]}] ; e.g :list/id = :ccts/message-schema
   {::pc/input  #{:list/id}
    ::pc/output [{:list/schemas [:sdb/schema-id :schema/name]}]}
   (when (= id :ccts/message-schema)
@@ -54,7 +55,7 @@
       {:list/id id
        :list/schemas schema-maps})))
 
-(pc/defresolver message-schema-r [env input] ; THIS ONE WORKS (But...)
+(pc/defresolver message-schema [env input] ; THIS ONE WORKS (But...)
   {::pc/output [{:ccts/message-schema [:list/id {:list/schemas [:schema/name :sdb/schema-id]}]}]}
   {:ccts/message-schema {:list/id :ccts/message-schema}})
 
@@ -62,7 +63,7 @@
 ;;; (pathom-resolve [{[:sdb/schema-id 3569] [{:model/sequence [:sp/name :sp/type]}]}])
 ;;; (pathom-resolve [{[:sdb/schema-id 3569] [:schema/name]}])
 ;;; (pathom-resolve [{[:sdb/schema-id 3569] [:model/sequence]}])
-(pc/defresolver schema-props-r [env {:sdb/keys [schema-id]}]
+(pc/defresolver sdb-schema-id->props [env {:sdb/keys [schema-id]}]
   {::pc/input #{:sdb/schema-id}
    ::pc/output [:schema/name :sdb/schema-id :schema/sdo :schema/type :schema/topic
                 :schema/subversion :schema/inlinedTypedefs :schema/spec
@@ -80,7 +81,7 @@
 ;;; (pathom-resolve [{[:schema/name invoice] [{[:sdb/elem-id 1280] [:schema/min-occurs]}]}]) ; YES!
 ;;; (pathom-resolve [{[:schema/name invoice] [{:model/sequence [:sp/name :sp/type :sp/minOccurs :sp/maxOccurs]}]}]) ; COMPLETE!
 ;;; (pathom-resolve [{[:sdb/schema-id 1230] [{:model/sequence [:sp/name :sp/type :sp/minOccurs :sp/maxOccurs]}]}]) ; COMPLETE!
-(pc/defresolver elem-props-r [env {:sdb/keys [elem-id]}]
+(pc/defresolver elem-props [env {:sdb/keys [elem-id]}]
   {::pc/input #{:sdb/elem-id}
    ::pc/output [:doc/docString
                 :sp/name
@@ -91,13 +92,13 @@
 
 ;;; Nice thing about pathom (relative to GraphQL) is that you don't have to start at the root.
 ;;; This has nothing to do with ::pc/input; you can add this to a query anywhere.
-(pc/defresolver current-system-time-r [_ _]
+(pc/defresolver current-system-time [_ _]
   {::pc/output [:server/time]}
   {:server/time (java.util.Date.)})
 
 ;;; ToDo: Of course, this needs to take an argument or be part of a user's project, etc.
 ;;; (pathom-resolve [{[:file/id :map-spec] [:user/data-file]}])
-(pc/defresolver data-file-r [env {:file/keys [id]}]
+(pc/defresolver data-file [env {:file/keys [id]}]
   {::pc/input #{:file/id}
    ::pc/output [:file/text]}
   (case id
@@ -122,14 +123,14 @@
         (log/warn "Could not find referenced schema for" elem-id)))
     (log/warn "Could not find owning schema for" elem-id)))
 
-(def resolvers [schema-by-name-r
-                full-schema-r
-                schema-props-r
-                elem-props-r
-                list-r
-                message-schema-r
-                data-file-r
-                current-system-time-r])
+(def resolvers [schema-name->sdb-schema-id
+                sdb-schema-id->schema-obj
+                sdb-schema-id->props
+                elem-props
+                list-id->list-schemas
+                message-schema
+                data-file
+                current-system-time])
 
 (def parser
   (p/parser
@@ -146,4 +147,5 @@
 (defn pathom-resolve
   "Run the pathom parser on the path and return results."
   [query]
+  (connect-db)
   (parser {} query))
