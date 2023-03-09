@@ -39,7 +39,7 @@
                                         :sign-releases? false ; signing problem (see mznp deps.edn)
                                         :artifact "RADmapper-1.0.29.jar"}}
 
-           :build    {:deps {io.github.clojure/tools.build {:git/tag "v0.9.4" :git/sha "27ff8a4"}}
+           :build    {:deps {io.github.clojure/tools.build {:git/tag "v0.9.4" :git/sha "76b78fe"}}
                       :ns-default build}
 
            ;; clj -M:morpheus -d graphs -f svg -e 'clojure.core/.*|:clj-kondo/unknown-namespace/.*|:cljs.core/.*' src
