@@ -20,7 +20,7 @@
 (deftest counting-schema
   (testing "Testing that the number of schema for each SDO/version are as expected."
     (testing "Testing schema count for OAGI 10.8.4 is 137."  (is (== 137 (-> :oagi  schema-for-sdo count))))
-    (testing "Testing schema count for OASis 2.3 is 98."     (is (==  98 (-> :oasis schema-for-sdo count))))
+    (testing "Testing schema count for OASis 2.3 is 98."     (is (==  99 (-> :oasis schema-for-sdo count))))
     (testing "Testing schema count for QIF 3.0 is 22."       (is (==  22 (-> :qif   schema-for-sdo count))))))
 
 (deftest files-look-good
