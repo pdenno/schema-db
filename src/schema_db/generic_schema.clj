@@ -1,8 +1,9 @@
 (ns schema-db.generic-schema
   "Functions to read XML to structures that the DB can use."
   (:require
-   [schema-db.db-util     :as dbu :refer [xpath xpath- xml-type?]]
-   [schema-db.schema-util :as su  :refer [schema-sdo schema-spec schema-version schema-subversion schema-type schema-name]]
+   [schema-db.db-util     :as dbu    :refer [xpath xpath- xml-type?]]
+   [schema-db.schema      :as schema :refer [simple-xsd?]]
+   [schema-db.schema-util :as su     :refer [schema-sdo schema-spec schema-version schema-subversion schema-type schema-name]]
    [taoensso.timbre                  :as log]))
 
 (def debugging? (atom false))
@@ -15,7 +16,7 @@
     (log/warn "No method for obj/schema.")
     (log/warn "No method for obj."))
   (reset! diag {:obj obj :schema schema})
-  :mm/rewrite-xsd-nil-method)
+  :failure/rewrite-xsd-nil-method)
 
 ;;; Establishes rewrite-xsd methods.
 (defmacro defparse [tag [arg props] & body]
@@ -42,7 +43,7 @@
     (reduce (fn [res schema]
                (if-let [prefix (-> ns-info :u->ps (get schema) first)]
                  (conj res {:import/prefix prefix :import/referencedSchema schema})
-                 (do (log/warn "No prefix for schema" schema) res)))
+                 (do (log/warn "No prefix for schema " schema) res)))
             []
             ischemas)))
 
@@ -145,7 +146,7 @@
   (let [attrs   (:xml/attrs xelem)
         doc     (xpath- xelem :xsd/annotation :xsd/documentation) ; Not commonly used! (Is used in  MF challenge problem.)
         doc?    (when-not (-> doc :xml/content string?) doc)
-        comp?   (when doc? (rewrite-xsd doc? :cct-component))
+        comp?   (when doc? (rewrite-xsd doc? :cct/component))
         doc-str (when (-> doc :xml/content string?) (:xml/content doc))
         cplx?   (xpath- xelem :xsd/complexType)] ; Generic schema example, Elena's.
     (cond-> {}
@@ -155,7 +156,7 @@
       (:use  attrs)       (assoc :sp/user (:use  attrs))
       (:minOccurs attrs)  (assoc :sp/minOccurs (-> attrs :minOccurs keyword))
       (:maxOccurs attrs)  (assoc :sp/maxOccurs (-> attrs :maxOccurs keyword))
-      doc?                (assoc :sp/function {:fn/type :cct-component}),
+      doc?                (assoc :sp/function {:fn/type :cct/component}),
       comp?               (assoc :sp/component comp?)
       doc-str             (assoc :sp/docString doc-str)
       cplx?               (assoc :schema/complexTypes
@@ -255,3 +256,11 @@
     (if (not-empty @enums)
       {:model/enumeration @enums},
       {:model/sequence result})))
+
+(defparse :xsd/attributeGroup
+  [xmap]
+  (let [doc (-> xmap (xpath- :xsd/annotation :xsd/documentation) :xml/content)]
+    {:xsd/attributeGroup
+     (cond-> {}
+       (not-empty doc)   (assoc :sp/docString doc)
+       true              (assoc :xsdAttrGroup/data (-> xmap :xml/attrs :ref)))}))

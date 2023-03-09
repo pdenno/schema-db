@@ -1,75 +1,16 @@
 (ns schema-db.std-schema
-  "Create and populate a database with schemas from various SDOs #{:CEFACT :OASIS :OAGI :ISO}
-   Every element (a named BBIE, BIE, data type etc.) has an :schema/term and a :sp/type.
-   (sp = schema-part, an abstraction over content and attributes.)
-   The :sp/type are #{:BCC :ACC :ASCC :CCT :uDT :qDT :BBIE :ABIE :ASBIE } cite{Kabak2010}.
-   :sp are derived from :xsd/element.
-   #{:ABIE :BBIE :ASBIE} have various 'contexts' (e.g. the business process context :Trade).
-   :uDT and :qDT specify restrictions on :CCT (core component type) and value sets of :BCC.
-   Elements are organized into schema.
-   Most access is through pathom, but some key functions for the REPL:
-     (list-schemas) - Get the list of schema (their :mm/schema-name), which is a URN string.
-     (get-schema <schema-urn-string>) - Get a map describing the whole schema. Its elements are :schema/content.
-     (get-term <schema-urn-string> <term>) - Get the map of information for the :schema/term.
-     (get-term-schemas <term>) - Get a list of schema (their URN strings) for the term (a string)."
+  "Code for common concepts of CCT messaging schema."
   (:require
-   [clojure.java.io             :as io]
+   [clojure.pprint              :refer [cl-format]]
    [clojure.spec.alpha          :as s]
    [clojure.string              :as str]
    [datahike.api                :as d]
    [datahike.pull-api           :as dp]
-   [mount.core                  :refer [defstate]]
-   [schema-db.db-util           :as du    :refer [conn xpath xpath- xml-type?]]
-   [schema-db.core              :as sdb   :refer [db-cfg db-schema]]
-   [schema-db.schema-util       :as su    :refer [q-schema-topic simple-xsd? generic-schema-type? special-schema-type?]]
-   [schema-db.generic-schema    :as gen-s :refer [defparse rewrite-xsd imported-schemas read-schema-file]]
-   [schema-db.util              :as util]
+   [schema-db.db-util           :as du     :refer [conn xpath xpath- xml-type?]]
+   [schema-db.schema            :as schema :refer [db-schema]]
+   [schema-db.schema-util       :as su]
+   [schema-db.generic-schema    :as gen-s  :refer [defparse rewrite-xsd imported-schemas]]
    [taoensso.timbre             :as log]))
-
-;;; ToDo:
-;;;    * The best thing to do with docs is alway collect them, but eliminate them in presentation like I optionally do with :db/id.
-;;;    * elem-props-r only works for UBL schema.
-;;;    * Get :sp/function into everything. BTW, CEFACT schema have  <ccts:Acronym>BBIE</ccts:Acronym>
-;;;    * Maybe split this file into something in src/dev and something in src/main/app/server (which is where the pathom stuff is).
-;;;      But then I wonder what would remain in src/main/app/model.
-
-(def diag (atom nil))
-
-;;; ToDo: Make the following environment variables.
-(def ubl-root        "/Users/pdenno/Documents/specs/OASIS/UBL-2.3/xsdrt/")
-;;;(def oagis-root "/Users/pdenno/Documents/specs/OAGI/OAGIS_10_6_EnterpriseEdition/OAGi-BPI-Platform/org_openapplications_oagis/10_6/Model/")
-(def oagis-10-8-root "data/OAGIS/10.8/Model/")
-(def michael-root    "data/testing/michaelQIF/")
-(def qif-root        "data/testing/QIF/xsd/")
-
-(defonce bad-file-on-rebuild? (atom #{})) ; For debugging
-
-
-;;; NB s/every-kv and s/every are probabilistic; they do not check every entry.
-;;; ToDo: Write something that uses these and does d/q to check the whole DB. Of course, these need more work!
-(s/def ::db-ent (s/keys :req [:db/id]))
-(s/def ::type-ref (s/and ::db-ent (s/keys :req [:sp/name :sp/type])))
-(s/def ::tagged (s/or :generic-elem ::gelem :component ::basic))
-(s/def ::basic (s/and ::db-ent (s/keys :req [:sp/name :sp/function]) #(= :BBIE  (-> % :sp/function :fn/componentType))))
-(s/def ::gelem (s/and ::db-ent (s/keys :req [:sp/name :sp/function]) #(= :gelem (-> % :sp/function :fn/type))))
-(s/def ::quantified-elem (s/and ::gelem (s/keys :req [:sp/minOccurs :sp/maxOccurs])))
-(s/def ::gelems (s/every ::gelem))
-(s/def ::model-seq (s/and ::db-ent (s/keys :req [:model/sequence]) #(s/valid? ::gelems (:model/sequence %)))) ; Test a property!
-(s/def ::ccts-based-message-schema (s/and ::db-ent (s/keys :req [:schema/type]) #(= :ccts/message-schema (:schema/type %))))
-
-;;;=======================  Rewrite xsd to schema content for DB  ===========================
-
-(s/def ::schema-type-kw #(or (special-schema-type? %)
-                             (generic-schema-type? %)))
-
-;;; Seen once in a QIF file.
-(defmethod rewrite-xsd :xsd/attributeGroup
-  [xmap]
-  (let [doc (-> xmap (xpath- :xsd/annotation :xsd/documentation) :xml/content)]
-    {:xsd/attributeGroup
-     (cond-> {}
-       (not-empty doc)   (assoc :sp/docString doc)
-       true              (assoc :xsdAttrGroup/data (-> xmap :xml/attrs :ref)))}))
 
 ;;; ToDo: Need file type for QIF Library files
 (defparse :generic/library-schema
@@ -84,7 +25,7 @@
       (assoc ?x :schema/shortName (or short-name :short-name-not-found))
       (if-let [typedefs (not-empty (filter #(xml-type? % :xsd/complexType) (-> (xpath ?x :xsd/schema) :xml/content)))]
         (assoc ?x :schema/inlinedTypedefs
-               (mapv #(rewrite-xsd % :inline-typedef) typedefs))
+               (mapv #(rewrite-xsd % :xsd/inline-typedef) typedefs))
         ?x)
       (if-let [elems (not-empty (filter #(xml-type? % :xsd/element)
                                         (:xml/content (xpath ?x :xsd/schema))))]
@@ -106,7 +47,7 @@
         top-elems (assoc :sp/typeRef (mapv #(-> (rewrite-xsd % :xsd/element)
                                                  (assoc :sp/function {:fn/type :type-ref}))
                                             top-elems))
-        inlined   (assoc :schema/inlinedTypedefs (mapv #(rewrite-xsd % :inline-typedef) inlined))
+        inlined   (assoc :schema/inlinedTypedefs (mapv #(rewrite-xsd % :xsd/inline-typedef) inlined))
         true      (dissoc :xml/content :xml/ns-info)))))
 
 ;;; Some of these (see UBL-UnqualifiedDataTypes-2.3.xsd) have useful content in :xsd/documentation.
@@ -179,7 +120,7 @@
         (do ; ToDo: This one is a combination of all the others. I don't yet see the point.
           (log/warn "Skipping CodeLists_1.xsd")
           (assoc ?x :mm/debug "Skipping Code List that is an aggregate of others."))
-        (assoc ?x :codeList/lists (mapv #(rewrite-xsd % :code-list)
+        (assoc ?x :codeList/lists (mapv #(rewrite-xsd % :generic/code-list)
                                         (filter #(xml-type? % :xsd/simpleType) content))))
       (dissoc ?x :xml/ns-info :xml/content))))
 
@@ -244,14 +185,14 @@
                      {}
                      (:xml/content xmap))))
 
-(defparse :cct-component
+(defparse :cct/component
   [xmap]
   (assert (xml-type? xmap :xsd/documentation))
   (cc-from-doc xmap))
 
 ;;; This is for processing the :xsd/documentation under the simpleContent (supplemental component)
 ;;; under complexContent the :xsd/documentation has the main component.
-(defparse :cct-supplementary
+(defparse :cct/supplementary
   [xmap]
   (assert (xml-type? xmap :xsd/simpleContent))
   (let [res?  (xpath- xmap :xsd/restriction)
@@ -262,7 +203,7 @@
         use   (-> attr :xml/attrs :use)
         doc   (xpath- attr :xsd/annotation :xsd/documentation)]
     (cond-> {}
-      true (assoc :sp/function {:fn/type :cct-supplementary-component})
+      true (assoc :sp/function {:fn/type :cct/supplementary-component})
       name (assoc :cct/scId   name)
       type (assoc :cct/scType type)
       use  (assoc :cct/scUse  use)
@@ -275,7 +216,7 @@
    These (see UBL-UnqualifiedDataTypes-2.3.xsd are the things with useful
    content in :xsd/documentation."
   [cplx-type]
-  (assert (xml-type? cplx-type  :xsd/complexType)) ; ToDo: top part is similar to :inline-typedef
+  (assert (xml-type? cplx-type  :xsd/complexType)) ; ToDo: top part is similar to :xsd/inline-typedef
   (let [doc?  (let [doc (xpath- cplx-type :xsd/annotation :xsd/documentation)]
                 (when-not (-> doc :xml/content string?) doc))
         sup?  (xpath- cplx-type :xsd/simpleContent)
@@ -284,9 +225,9 @@
     (cond-> {}
       true  (assoc :sp/type (-> cplx-type :xml/attrs :name)),
       true  (assoc :sp/function {:fn/type :sequence}),
-      doc?  (assoc :sp/function {:fn/type :cct-component}),
-      doc?  (assoc :sp/component     (rewrite-xsd doc? :cct-component))
-      sup?  (assoc :sp/supplementary (rewrite-xsd sup? :cct-supplementary))
+      doc?  (assoc :sp/function {:fn/type :cct/component}),
+      doc?  (assoc :sp/component     (rewrite-xsd doc? :cct/component))
+      sup?  (assoc :sp/supplementary (rewrite-xsd sup? :cct/supplementary))
       elems (assoc :model/sequence (mapv rewrite-xsd elems)))))
 
 ;;; ToDo: maybe rewrite this to have something like namespace for the references "udt". "schema/referenced-schema
@@ -301,7 +242,7 @@
         (assoc :term/name name)
         (dissoc :sp/name))))
 
-(defparse :oagis-type-attr
+(defparse :xsd/type-attr
   [xsd-attr]
   (let [attr (:xml/attrs xsd-attr)]
     (cond-> {}
@@ -310,7 +251,7 @@
       (= (:use attr) "optional") (assoc :sp/minOccurs :0)
       (= (:use attr) "optional") (assoc :sp/maxOccurs :1))))
 
-(defparse :inline-typedef ; OAGIS only AFAIK
+(defparse :xsd/inline-typedef ; OAGIS only AFAIK
   [cplx-type]
   (assert (xml-type? cplx-type :xsd/complexType))
   (let [ext?  (xpath- cplx-type :xsd/complexContent :xsd/extension)
@@ -328,10 +269,10 @@
       true    (assoc :sp/function {:fn/type :sequence}),
       ext?    (assoc :sp/function {:fn/type :extension   :fn/base (-> ext? :xml/attrs :base)}),
       res?    (assoc :sp/function {:fn/type :restriction :fn/base (-> res? :xml/attrs :base)}),
-      attrs   (assoc :schema/type-attrs (mapv #(rewrite-xsd % :oagis-type-attr) attrs)),
+      attrs   (assoc :schema/type-attrs (mapv #(rewrite-xsd % :xsd/type-attr) attrs)),
       elems   (assoc :model/sequence    (mapv #(rewrite-xsd % :xsd/element) elems)))))
 
-(defparse :oagis-ccts-def
+(defparse :oagis/cct-def
   ;; Argument is a vector of :ROOT/ccts_whatever properties.
   ;; Return a msp of these translated :cct/whatever.
   [ccts-tags]
@@ -347,16 +288,16 @@
           {}
           ccts-tags))
 
-(defparse :code-term
+(defparse :generic/code-term
   ;; Return a map of the CCTS and ISO properties defined by an OAGIS or OAGIS/ISO code term.
   [xmap {:skip-doc-processing? true}]
   (assert (xml-type? xmap :xsd/enumeration))
   (let [term (-> xmap :xml/attrs :value)
         doc    (xpath xmap :xsd/annotation :xsd/documentation)]
     ;; Some code lists, like OAGIS CodeList_CurrencyCode_ISO_7_04, don't have documentation.
-    {term (rewrite-xsd (:xml/content doc) :oagis-ccts-def)}))
+    {term (rewrite-xsd (:xml/content doc) :oagis/cct-def)}))
 
-(defparse :code-list
+(defparse :generic/code-list
   ;; Walk through a code list collecting terms.
   [xmap]
   (assert (xml-type? xmap :xsd/simpleType))
@@ -365,140 +306,14 @@
       (assoc :sp/function {:fn/type :codeList})
       (assoc :xsd/restriction (rewrite-xsd (xpath xmap :xsd/restriction) :xsd/restriction))
       (assoc :codeList/terms (reduce (fn [m v]
-                                        (merge m (rewrite-xsd v :code-term)))
+                                        (merge m (rewrite-xsd v :generic/code-term)))
                                       {}
                                       (filter #(xml-type? % :xsd/enumeration)
                                               (:xml/content (xpath xmap :xsd/restriction)))))
       (dissoc :xsd/restriction)))
 
-;;;=========================== Schema Operations ===========================================
-(defn list-schemas
-  "Return a list of schema, by default they are sorted by 'topic'"
-  [& {:keys [sdo sort?] :or {sort? true}}]
-  (let [base-names
-        (if sdo
-          (d/q `[:find [?n ...] :where [?s :schema/name ?n] [?s :schema/sdo ~sdo]] @conn)
-          (d/q '[:find [?n ...] :where [_ :schema/name ?n]] @conn))]
-    (if sort?
-      (let [urns&topics (map (fn [urn topic] {:urn urn :topic topic})
-                             base-names
-                             (map q-schema-topic base-names))]
-        (->> urns&topics
-             (sort-by :topic)
-             (mapv :urn)))
-      (vec base-names))))
 
-(defn get-schema
-  "Return the map stored in the database for the given schema-urn. Useful in development.
-    :filter-set - DB attribute to leave out (e.g. #{:db/id} or #{:db/doc-string}) "
-  [schema-urn & {:keys [resolve? filter-set] :or {resolve? true filter-set #{:doc/docString}}}]
-  (when-let [ent  (d/q `[:find ?ent .
-                         :where [?ent :schema/name ~schema-urn]] @conn)]
-    (cond-> (dp/pull @conn '[*] ent)
-      resolve? (du/resolve-db-id conn filter-set))))
 
-(def diag-path "Pathname for debugging. Keep." (atom nil))
-
-(defn add-schema-file!
-  [path]
-  (reset! diag-path path)
-  (let [db-content (read-schema-file path)]
-    (try
-      (if (du/storable? db-content)
-        (try (d/transact conn db-content) ; Use d/transact here, not transact! which uses a future.
-             (catch Exception e
-               (swap! bad-file-on-rebuild? conj path)
-               (log/error "Error adding" path ":" e)))
-        (do (swap! bad-file-on-rebuild? conj path)
-            (log/error "Schema-map contains nils and cannot be stored." path)))
-      (catch Exception e
-        (swap! bad-file-on-rebuild? conj path)
-        (log/error "Error checking storable?" path ":" e)))))
-
-(defn add-schema-files!
-  "Read a directory of files into the database.
-   They consist of a rewritten (see rewrite-xsd) maps with some useful metadata.
-    DIR is the directory to read from. All the .xsd files there will be added to the DB."
-  [dir]
-  (let [grammar-matcher (.getPathMatcher
-                          (java.nio.file.FileSystems/getDefault)
-                          "glob:*.xsd")
-        files (->> (file-seq (io/file dir))
-                   (filter #(.isFile %))
-                   (filter #(.matches grammar-matcher (.getFileName (.toPath %))))
-                   (mapv #(.getAbsolutePath %)))]
-    (doseq [file files]
-      (add-schema-file! file))))
-
-(defn update-bad-files!
-  "On rebuild, note what couldn't be read."
-  []
-  (when (:rebuild-db? db-cfg)
-    (doseq [file @bad-file-on-rebuild?]
-      (d/transact conn [{:schema/pathname file
-                         :mm/fileNotRead? true}]))))
-
-(defn bad-files
-  "This creates a 'to do' list for debugging!"
-  []
-  (d/q '[:find [?p ...] :where
-         [?ent :mm/fileNotRead? true]
-         [?ent :schema/pathname ?p]]
-       @conn))
-
-(defn unused-attrs
-  "Return a list of unused database attributes (for debugging)."
-  []
-  (let [unused (atom [])]
-    (doseq [attr (map :db/ident db-schema)]
-      (when (empty? (d/q `[:find ?e :where [?e ~attr ?]] @conn))
-        (swap! unused conj attr)))
-    @unused))
-
-;;; =================================== Schema-db post-processing ==============================
-(defn add-topics! []
-  (let [forms (reduce (fn [forms urn]
-                        (if-let [topic (su/schema-topic urn)]
-                          (conj forms {:schema/name urn :schema/topic topic})
-                          forms))
-                      []
-                      (list-schemas))]
-    (d/transact conn forms)))
-
-(defn fix-includes! ; Just used on OAGIS schema, UBL-CommonExtensionComponents-2.3.xsd AFAIK.
-  "Files have :mm/tempInclude which are paths (typically relative)
-   Add :schema/includedSchemas where these are resolved to references to :schema/name."
-  []
-  (let [temps (d/q '[:find ?ent ?i ?p :keys s/ent s/include-file s/s-path :where
-                     [?ent :mm/tempInclude ?i]
-                     [?ent :schema/pathname ?p]]
-                   @conn)
-        with-urn (map (fn [temp]
-                        (let [[_ up _ ipath] (re-matches #"^((\.\./)*)(.*)$" (:s/include-file temp))
-                              schema-path (clojure.java.io/file (:s/s-path temp))
-                              up-cnt (inc (int (/ (count up) 3)))
-                              dir    (du/dir-up schema-path up-cnt)
-                              file   (str dir "/" ipath)]
-                          (if-let [urn (d/q `[:find ?urn . :where
-                                              [?e :schema/pathname ~file]
-                                              [?e :schema/name ?urn]]
-                                            @conn)]
-                            (assoc temp :s/include urn)
-                            (do (log/warn "While resolving includes, cannot find schema with :schema/pathname" file)
-                                temp))))
-                      temps)]
-    (d/transact conn
-                (mapv #(-> {}
-                           (assoc :db/id (:s/ent %))
-                           (assoc :schema/includedSchemas (:s/include %)))
-                      (filter #(contains? % :s/include) with-urn)))))
-
-(defn postprocess-schemas!
-  "Do some additional work on schema already in the DB."
-  []
-  (add-topics!)
-  (fix-includes!)
-  (update-bad-files!))
 
 ;;; ================================ Expand: resolve to atomic schema parts  ===========================
 ;;; In the process, keep track of the sp's :sp*/children, a property that is not in the DB owing to
@@ -700,6 +515,65 @@
                           @conn))]
     (du/resolve-db-id (dp/pull @conn '[*] ent) conn)))
 
+
+(def non-standard-oagis-schema-topics
+  (let [pat {"urn:oagis-~A:CodeList_ConstraintTypeCode_1.xsd"            "Codelist, ConstraintTypes",
+             "urn:oagis-~A:CodeList_TimeFormatCode_1.xsd"                "Codelist, TimeFormats"
+             "urn:oagis-~A:CodeList_DateTimeFormatCode_1.xsd"            "Codelist, DateTimeFormats"
+             "urn:oagis-~A:CodeList_TimeZoneCode_1.xsd"                  "Codelist, TimeZones",
+             "urn:oagis-~A:CodeList_DateFormatCode_1.xsd"                "Codelist, DateFormat",
+             "urn:oagis-~A:CodeList_CharacterSetCode_IANA_20131220.xsd"  "Codelist, CharacterSets",
+             "urn:oagis-~A:CodeLists_1.xsd"                              "Codelist, Aggregated",
+             "urn:oagis-~A:CodeList_ConditionTypeCode_1.xsd"             "Codelist, ConditionTypes",
+             "urn:oagis-~A:CodeList_CurrencyCode_ISO_7_04.xsd"           "Codelist, Currencies"}]
+    (merge (reduce-kv (fn [m k v] (assoc m (cl-format nil k "10.6") v)) {} pat)
+           (reduce-kv (fn [m k v] (assoc m (cl-format nil k "10.8") v)) {} pat))))
+
+(def non-standard-schema-topics
+  "Easiest to just define these explicitly"
+  (merge non-standard-oagis-schema-topics
+         {"urn:iso:std:iso:20022:tech:xsd:pain.001.001.04"                              "Datatypes, Financial",
+          "urn:iso:std:iso:20022:tech:xsd:pain.001.001.05"                              "Datatypes, Financial",
+          "urn:iso:std:iso:20022:tech:xsd:pain.002.001.04"                              "Datatypes, Financial",
+          "urn:iso:std:iso:20022:tech:xsd:pain.002.001.05"                              "Datatypes, Financial",
+          "urn:iso:std:iso:20022:tech:xsd:pain.008.001.03"                              "Datatypes, Financial",
+          "urn:iso:std:iso:20022:tech:xsd:pain.008.001.04"                              "Datatypes, Financial",
+          "urn:oasis:names:specification:ubl:schema:xsd:CommonExtensionComponents-2"    "Components, CommonExtensions",
+          "urn:oasis:names:specification:ubl:schema:xsd:UnqualifiedDataTypes-2"         "Datatypes, Unqualified",
+          "urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2"        "Components, CommonBasic",
+          "urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2"    "Components, CommonAggregate",
+          "urn:un:unece:uncefact:data:specification:CoreComponentTypeSchemaModule:2"    "Components, Core",
+          "urn:oasis:names:specification:ubl:schema:xsd:QualifiedDataTypes-2"           "Datatypes, Qualified"
+          "urn:oasis:names:specification:ubl:schema:xsd:CommonSignatureComponents-2"    "Components, CommonSignature",
+          "http://uri.etsi.org/01903/v1.4.1#"                                            "ETSI, not investigaated"}))
+
+(defn schema-topic
+  "Return the portion of the URN that most specifically describes the schema content.
+   This is not necessarily unique!"
+  [urn]
+  (let [desc [(su/q-schema-sdo urn) (su/q-schema-type urn)]]
+     (cond (= desc [:oasis :ccts/message-schema])
+           (->> urn (re-matches #"^urn:oasis:names:specification:ubl:schema:xsd:(.+)-\d$") second),
+
+           (= desc [:oagi :ccts/message-schema])
+           (->> urn (re-matches #"^urn:oagis-\d+\.\d+:(.+)$") second),
+
+           (= desc [:oagi :generic/code-list-schema])
+           (->> urn (re-matches #"^urn:oagis-\d+\.\d+:(.+)$") second),
+
+           (= desc [:qif :generic/message-schema])
+           (->> urn (re-matches #"^urn:QIF-\d:Application:QIF(.+)$") second),
+
+           (= desc [:qif :generic/library-schema])
+           (->> urn (re-matches #"^urn:QIF-\d:Library:(.+)$") second),
+
+           (contains? non-standard-schema-topics urn)
+           (get non-standard-schema-topics urn),
+
+           :else
+           (do (log/warn "Cannot determine schema topic" urn) ""))))
+
+;;;========================================= WIP =======================================
 ;;; For debugging
 (defn query-for [pathom-eql] ((var-get (resolve 'rad-mapper.pathom/parser)) {} pathom-eql))
 
@@ -718,37 +592,3 @@
   "Get Michael's TestMethod Schema"
   []
   (query-for [{[:schema/name "urn:oagis-10.6:TestMethod-MF"] [:sdb/schema-id]}]))
-
-;;;================================ Starting and Stopping ===========================================
-;;; (user/restart) whenever you update the DB or the resolvers. (tools/refresh) if compilation fails.
-(defn create-db!
-  "Create the database if :rebuild? is true, otherwise just set the connection atom, conn."
-  []
-  (when (:rebuild-db? db-cfg)
-    (reset! bad-file-on-rebuild? #{})
-    (when (d/database-exists? db-cfg) (d/delete-database db-cfg))
-    (d/create-database db-cfg)
-    (alter-var-root (var conn) (fn [_] (d/connect db-cfg)))
-    (d/transact conn db-schema)
-    ;(add-schema-files! (str ubl-root "maindoc"))
-    ;(add-schema-files! (str ubl-root "common"))
-    (add-schema-files! (str oagis-10-8-root "Nouns"))
-    (add-schema-files! (str oagis-10-8-root "Platform/2_7/Common"))
-    (add-schema-files! (str qif-root "QIFApplications"))
-    (add-schema-files! (str qif-root "QIFLibrary"))
-    (add-schema-files! michael-root)
-    (postprocess-schemas!)
-    (log/info "Created schema DB")))
-
-(defn connect-db
-  "Set the var rad-mapper.schema-db/conn by doing a d/connect."
-  []
-  (if (d/database-exists? db-cfg)
-    (alter-var-root (var conn) (fn [_] (d/connect db-cfg))),
-    (log/warn "There is no DB to connect to.")))
-
-(defstate std-schema
-  :start
-  (do
-    (util/config-log :info)
-    (connect-db)))

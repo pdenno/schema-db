@@ -3,37 +3,11 @@
   (:require
    [clojure.pprint               :refer [cl-format]]
    [clojure.string               :as str]
-   [datahike.api        :as d]
-   [schema-db.db-util :as du :refer [conn xpath xml-type?]]
+   [datahike.api                 :as d]
+   [datahike.pull-api            :as dp]
+   [schema-db.db-util :as du     :refer [conn xpath xml-type?]]
+   [schema-db.schema  :as schema :refer [simple-xsd? generic-schema-type? special-schema-type?]]
    [taoensso.timbre              :as log]))
-
-(def simple-xsd?
-  {:xsd/length         :number
-   :xsd/minLength      :number
-   :xsd/maxLength      :number
-   :xsd/pattern        :string
-   :xsd/fractionDigits :number
-   :xsd/totalDigits    :number
-   :xsd/maxExclusive   :number
-   :xsd/maxInclusive   :number
-   :xsd/minExclusive   :number
-   :xsd/minInclusive   :number})
-
-(def generic-schema-type? "These might be associated with whole files, but specializations might exist"
-  #{:generic/message-schema
-    :generic/library-schema
-    :generic/qualified-dtype-schema,
-    :generic/unqualified-dtype-schema
-    :generic/code-list-schema
-    :generic/xsd-file})
-
-(def special-schema-type? "These are associated with whole files."
-  #{:ccts/message-schema
-    :ubl/message-schema
-    :oagis/message-schema
-    :ccts/component-schema
-    :oasis/component-schema
-    :iso/iso-20022-schema})
 
 ;;; This does file-level dispatching as well as the details
 (defn rewrite-xsd-dispatch
@@ -122,7 +96,8 @@
   "Return a keyword identifying the XML file's standards development organization."
   [xmap]
   (if-let [ns (schema-ns xmap)]
-    (cond (re-matches #"^urn:oasis:[\w,\-,\:]+:ubl:[\w,\-,\:]+$" ns) :oasis,
+    (cond ;(re-matches #"^urn:oasis:[\w,\-,\:]+:ubl:[\w,\-,\:]+$" ns) :oasis,
+          (re-matches #"^urn:oasis:[\w,\-,\:].*$" ns) :oasis,
           (re-matches #"^urn:un:unece:uncefact:[\w,\-,\:]+$" ns) :cefact, ; cefact via UBL ; ToDo: NONE OF THESE???
           (re-matches #"^http://www.openapplications.org/oagis/.*$" ns) :oagi,
           (re-matches #"^urn:iso:std:iso:20022:tech:xsd:pain.+$" ns) :iso ; ISO via oagis
@@ -195,15 +170,16 @@
   [xmap]
   (let [ns   (schema-ns xmap)
         spec (case (:schema/sdo xmap)
-               :cefact     (when (= ns "urn:un:unece:uncefact:data:specification:CoreComponentTypeSchemaModule:2") :cefact-ccl)
-               :oasis      (when (re-matches #"^urn:oasis:[\w,\-,\:]+:ubl:[\w,\-,\:]+(\-2)$" ns)                   :ubl)
+               :cefact     (when (= ns "urn:un:unece:uncefact:data:specification:CoreComponentTypeSchemaModule:2") :cefact-ccl),
+               :oasis      (cond (re-matches #"^urn:oasis:[\w,\-,\:]+:ubl:[\w,\-,\:]+(\-2)$" ns)                   :ubl
+                                 (= ns "urn:oasis:names:specification:bdndr:schema:xsd:UnqualifiedDataTypes-1")    :ubl) ; I hesitate to call it :oasis
                :oagi       (when (re-matches #"^http://www.openapplications.org/oagis/10$" ns)                     :oagis)
                :iso        :iso-20022
                :etsi       :etsi-1903 ; ToDo: guessing
                :w3c        :w3c       ; In QIF somewhere!
                :qif        :qif
                "default")]
-    (or spec (do (log/warn "Cannot determine file spec:" (:schema/pathname xmap) " Using :default.")
+    (or spec (do (log/warn "Cannot determine schema-spec:" (:schema/pathname xmap) " Using :default.")
                  :unknown))))
 
 (defn schema-version
@@ -240,10 +216,12 @@
       :cefact
       (cond (= ns "urn:un:unece:uncefact:data:specification:CoreComponentTypeSchemaModule:2")
             :generic/unqualified-dtype-schema
-            :else (log/warn "Cannot determine file spec:" pname))
+            :else (log/warn "Cannot determine schema-type:" pname))
 
       :oasis
       (cond (= ns "urn:oasis:names:specification:ubl:schema:xsd:UnqualifiedDataTypes-2")
+            :generic/unqualified-dtype-schema,
+            (= ns "urn:oasis:names:specification:bdndr:schema:xsd:UnqualifiedDataTypes-1")
             :generic/unqualified-dtype-schema,
             (= ns "urn:oasis:names:specification:ubl:schema:xsd:QualifiedDataTypes-2")
             :generic/qualified-dtype-schema,
@@ -251,7 +229,7 @@
             :ccts/component-schema
             (re-matches #"^urn:oasis:names:specification:ubl:schema:xsd:\w+-2$" ns)
             :ccts/message-schema
-            :else (log/warn "Cannot determine file spec:" pname))
+            :else (log/warn "Cannot determine schema-type:" pname))
 
       :oagi ; no URNs; guess based on pathname.
       (cond (re-matches #".*Fields\.xsd$" pname) ; though it is in the "Components" directory
@@ -317,3 +295,29 @@
       (let [fname (-> pname (str/split #"/") last)]
         (log/warn "Could not determine schema name:" pname " Using " fname)
         fname))))
+
+;;;=========================== Schema Operations ===========================================
+(defn list-schemas
+  "Return a list of schema, by default they are sorted by 'topic'"
+  [& {:keys [sdo sort?] :or {sort? true}}]
+  (let [base-names
+        (if sdo
+          (d/q `[:find [?n ...] :where [?s :schema/name ?n] [?s :schema/sdo ~sdo]] @conn)
+          (d/q '[:find [?n ...] :where [_ :schema/name ?n]] @conn))]
+    (if sort?
+      (let [urns&topics (map (fn [urn topic] {:urn urn :topic topic})
+                             base-names
+                             (map q-schema-topic base-names))]
+        (->> urns&topics
+             (sort-by :topic)
+             (mapv :urn)))
+      (vec base-names))))
+
+(defn get-schema
+  "Return the map stored in the database for the given schema-urn. Useful in development.
+    :filter-set - DB attribute to leave out (e.g. #{:db/id} or #{:db/doc-string}) "
+  [schema-urn & {:keys [resolve? filter-set] :or {resolve? true filter-set #{:doc/docString}}}]
+  (when-let [ent  (d/q `[:find ?ent .
+                         :where [?ent :schema/name ~schema-urn]] @conn)]
+    (cond-> (dp/pull @conn '[*] ent)
+      resolve? (du/resolve-db-id conn filter-set))))
