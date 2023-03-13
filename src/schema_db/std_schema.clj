@@ -6,7 +6,7 @@
    [clojure.string              :as str]
    [datahike.api                :as d]
    [datahike.pull-api           :as dp]
-   [schema-db.db-util           :as du     :refer [conn xpath xpath- xml-type?]]
+   [schema-db.db-util           :as du     :refer [connect-atm xpath xpath- xml-type?]]
    [schema-db.schema            :as schema :refer [db-schema]]
    [schema-db.schema-util       :as su]
    [schema-db.generic-schema    :as gen-s  :refer [defparse rewrite-xsd imported-schemas]]
@@ -327,8 +327,8 @@
                           [?s :schema/name ~schema-urn]
                           [?s :schema/inlinedTypedefs ?ent]
                           [?ent :sp/type ~type-term]]
-                      @conn)]
-    (-> (du/resolve-db-id {:db/id ent} conn)
+                      @(connect-atm))]
+    (-> (du/resolve-db-id {:db/id ent} (connect-atm))
         (assoc :mm/access-method :inlined-typedef))))
 
 (defn imported-typedef-ref
@@ -353,9 +353,9 @@
                        [?ref1  :sp/type ?type]
                        [?s2    :schema/content ?ref2]
                        [?ref2  :sp/name ?type]]
-                     @conn)]
+                     @(connect-atm))]
         (when (and ent lib)
-          (-> (du/resolve-db-id {:db/id ent} conn)
+          (-> (du/resolve-db-id {:db/id ent} (connect-atm))
               (assoc :mm/lib-where-found lib)
               (assoc :mm/access-method :imported-typedef)))))))
 
@@ -365,8 +365,8 @@
                         [?s  :schema/name ~schema-urn]
                         [?s  :model/sequence ?m]
                         [?m  :sp/type ~type-term]]
-                      @conn)]
-    (-> (du/resolve-db-id {:db/id ent} conn)
+                      @(connect-atm))]
+    (-> (du/resolve-db-id {:db/id ent} (connect-atm))
         (assoc :mm/access-method :model-sequence-type))))
 
 #_(defn model-sequence-name-ref
@@ -376,8 +376,8 @@
                         [?s  :schema/name ~schema-urn]
                         [?s  :model/sequence ?m]
                         [?m  :sp/name ~term]]
-                      @conn)]
-    (let [found (du/resolve-db-id {:db/id ent} conn)]
+                      @(connect-atm))]
+    (let [found (du/resolve-db-id {:db/id ent} (connect-atm))]
       (-> {}
           (assoc :mm/access-method :model-sequence-name)
           (assoc :model/sequence (:model/sequence found))))))
@@ -391,8 +391,8 @@
                         [?s  :model/sequence ?m]
                         [?m  :sp/name ~term]
                         [?m  :sp/type ?type]]
-                      @conn)]
-    (let [found (du/resolve-db-id {:db/id ent} conn)]
+                      @(connect-atm))]
+    (let [found (du/resolve-db-id {:db/id ent} (connect-atm))]
       (-> {} ; I'm not keeping much of the schema!
           (assoc :db/id          ent)
           (assoc :schema/type    :ccts/message-schema)
@@ -409,8 +409,8 @@
                         [?s2 :schema/name ?i]
                         [?s2 :sp/name ~type-term]
                         #_[?cont  :term/type ~type-term]]
-                      @conn)]
-    (-> (du/resolve-db-id {:db/id ent} conn)
+                      @(connect-atm))]
+    (-> (du/resolve-db-id {:db/id ent} (connect-atm))
         (assoc :mm/access-method :included-typedef))))
 
 ;;;(library-lookup-ref "UBLExtension" "urn:oasis:names:specification:ubl:schema:xsd:CommonExtensionComponents-2")
@@ -421,8 +421,8 @@
                         [?s :schema/name ~schema-urn]
                         [?s :schema/content ?c]
                         [?c :sp/name ~term]]
-                      @conn)]
-    (-> (du/resolve-db-id {:db/id ent} conn)
+                      @(connect-atm))]
+    (-> (du/resolve-db-id {:db/id ent} (connect-atm))
         (assoc :mm/access-method :library-lookup))))
 
 ;;; (term-ref ubl-invoice "InvoiceType")    ; get from inlined.
@@ -444,7 +444,7 @@
 
 ;;; ToDo: Remember that once you run this, it is in the schema from then on.
 ;;; (get-schema "small-invoice-schema-1")
-(defn store-test [] (->> "small-invoice-schema-1.edn" slurp read-string vector (d/transact conn)))
+(defn store-test [] (->> "small-invoice-schema-1.edn" slurp read-string vector (d/transact (connect-atm))))
 ;;; (expand "Invoice" "small-invoice-schema-1")
 
 (defn expand-type
@@ -504,7 +504,7 @@
                             [?content :term/type ~term]
                             [?content :sp/function ?fn]
                             [?fn      :fn/componentType :ABIE]]
-                          @conn) ; ToDo: Datahike OR an NOT queries not implemented??? Use predicate?
+                          @(connect-atm)) ; ToDo: Datahike OR an NOT queries not implemented??? Use predicate?
                      (d/q `[:find ?content .
                             :where
                             [?schema  :schema/name ~schema-urn]
@@ -512,8 +512,8 @@
                             [?content :term/type ~term]
                             [?content :sp/function ?fn]
                             [?fn      :fn/componentType :BBIE]]
-                          @conn))]
-    (du/resolve-db-id (dp/pull @conn '[*] ent) conn)))
+                          @(connect-atm)))]
+    (du/resolve-db-id (dp/pull @(connect-atm) '[*] ent) (connect-atm))))
 
 
 (def non-standard-oagis-schema-topics
@@ -586,7 +586,7 @@
       (get ?s [:schema/name sname])
       (:sdb/schema-id ?s)
       {:db/id ?s}
-      (du/resolve-db-id ?s conn))))
+      (du/resolve-db-id ?s (connect-atm)))))
 
 (defn mf-meth
   "Get Michael's TestMethod Schema"

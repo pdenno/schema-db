@@ -5,7 +5,7 @@
    [clojure.string               :as str]
    [datahike.api                 :as d]
    [datahike.pull-api            :as dp]
-   [schema-db.db-util :as du     :refer [conn xpath xml-type?]]
+   [schema-db.db-util :as du     :refer [connect-atm xpath xml-type?]]
    [schema-db.schema  :as schema :refer [simple-xsd? generic-schema-type? special-schema-type?]]
    [taoensso.timbre              :as log]))
 
@@ -70,21 +70,21 @@
   [urn]
   (d/q `[:find ?topic .
          :where [?s :schema/name ~urn]
-         [?s :schema/topic ?topic]] @conn))
+         [?s :schema/topic ?topic]] @(connect-atm)))
 
 (defn q-schema-sdo
   "Lookup the SDO for a schema in the DB."
   [urn]
   (d/q `[:find ?sdo .
          :where [?s :schema/name ~urn]
-         [?s :schema/sdo ?sdo]] @conn))
+         [?s :schema/sdo ?sdo]] @(connect-atm)))
 
 (defn q-schema-type
   "Lookup the type for a schema in the DB."
   [urn]
   (d/q `[:find ?type .
          :where [?s :schema/name ~urn]
-         [?s :schema/type ?type]] @conn))
+         [?s :schema/type ?type]] @(connect-atm)))
 
 (defn schema-ns
   "Return the namespace urn string for the argument xmap."
@@ -302,8 +302,8 @@
   [& {:keys [sdo sort?] :or {sort? true}}]
   (let [base-names
         (if sdo
-          (d/q `[:find [?n ...] :where [?s :schema/name ?n] [?s :schema/sdo ~sdo]] @conn)
-          (d/q '[:find [?n ...] :where [_ :schema/name ?n]] @conn))]
+          (d/q `[:find [?n ...] :where [?s :schema/name ?n] [?s :schema/sdo ~sdo]] @(connect-atm))
+          (d/q '[:find [?n ...] :where [_ :schema/name ?n]] @(connect-atm)))]
     (if sort?
       (let [urns&topics (map (fn [urn topic] {:urn urn :topic topic})
                              base-names
@@ -318,6 +318,6 @@
     :filter-set - DB attribute to leave out (e.g. #{:db/id} or #{:db/doc-string}) "
   [schema-urn & {:keys [resolve? filter-set] :or {resolve? true filter-set #{:doc/docString}}}]
   (when-let [ent  (d/q `[:find ?ent .
-                         :where [?ent :schema/name ~schema-urn]] @conn)]
-    (cond-> (dp/pull @conn '[*] ent)
-      resolve? (du/resolve-db-id conn filter-set))))
+                         :where [?ent :schema/name ~schema-urn]] @(connect-atm))]
+    (cond-> (dp/pull @(connect-atm) '[*] ent)
+      resolve? (du/resolve-db-id (connect-atm) filter-set))))

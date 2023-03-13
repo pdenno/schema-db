@@ -1,14 +1,24 @@
 (ns schema-db.db-util
   "Utilities for schema-db (which will likely become a library separate from rad-mapper"
   (:require
-   [cemerick.url              :as url]
-   [clojure.data.xml  :as x]
-   [clojure.java.io   :as io]
-   [clojure.walk              :as walk]
+   [cemerick.url          :as url]
+   [clojure.data.xml      :as x]
+   [clojure.java.io       :as io]
+   [clojure.walk          :as walk]
+   [datahike.api          :as d]
    [datahike.pull-api     :as dp]
-   [taoensso.timbre           :as log]))
+   [taoensso.timbre       :as log]))
 
-(def conn "A handy connection to the database" nil) ;
+(def db-cfg-atm "Configuration map used for connecting to the db. It is set in core."  (atom nil))
+
+(defn connect-atm
+  "Set the var rad-mapper.db-util/conn by doing a d/connect.
+   Return a connection atom."
+  []
+  (when-let [db-cfg @db-cfg-atm]
+    (if (d/database-exists? db-cfg)
+      (d/connect db-cfg)
+      (log/warn "There is no DB to connect to."))))
 
 ;;; ToDo:
 ;;;  - cljs complains about not finding x/element-nss, which I don't see in the  0.2.0-alpha8 source at all.

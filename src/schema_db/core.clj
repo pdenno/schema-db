@@ -16,7 +16,7 @@
    [clojure.java.io              :as io]
    [datahike.api                 :as d]
    [mount.core                   :refer [defstate]]
-   [schema-db.db-util            :as du     :refer [conn]]
+   [schema-db.db-util            :as du     :refer [db-cfg-atm connect-atm]]
    [schema-db.generic-schema     :as gen-s  :refer [read-schema-file]]
    [schema-db.schema             :as schema :refer [db-schema]]
    [schema-db.schema-util        :as su]
@@ -46,9 +46,9 @@
         (str base-dir "/sources")
         (throw (ex-info "Directory not found:" {:dir (str base-dir "/sources")}))))
 
-(def db-cfg {:store {:backend :file :path db-dir}
-             :rebuild-db? true
-             :schema-flexibility :write})
+(reset! db-cfg-atm {:store {:backend :file :path db-dir}
+                    :rebuild-db? false
+                    :schema-flexibility :write})
 
 (def diag (atom nil))
 
@@ -68,7 +68,7 @@
   (let [db-content (read-schema-file path)]
     (try
       (if (du/storable? db-content)
-        (try (d/transact conn db-content) ; Use d/transact here, not transact! which uses a future.
+        (try (d/transact (connect-atm) db-content) ; Use d/transact here, not transact! which uses a future.
              (catch Exception e
                (swap! bad-file-on-rebuild? conj path)
                (log/error "Error adding" path ":" e)))
@@ -99,9 +99,9 @@
 (defn update-bad-files!
   "On rebuild, note what couldn't be read."
   []
-  (when (:rebuild-db? db-cfg)
+  (when (:rebuild-db? @db-cfg-atm)
     (doseq [file @bad-file-on-rebuild?]
-      (d/transact conn [{:schema/pathname file
+      (d/transact (connect-atm) [{:schema/pathname file
                          :mm/fileNotRead? true}]))))
 
 (defn bad-files
@@ -110,14 +110,14 @@
   (d/q '[:find [?p ...] :where
          [?ent :mm/fileNotRead? true]
          [?ent :schema/pathname ?p]]
-       @conn))
+       @(connect-atm)))
 
 (defn unused-attrs
   "Return a list of unused database attributes (for debugging)."
   []
   (let [unused (atom [])]
     (doseq [attr (map :db/ident db-schema)]
-      (when (empty? (d/q `[:find ?e :where [?e ~attr ?]] @conn))
+      (when (empty? (d/q `[:find ?e :where [?e ~attr ?]] @(connect-atm)))
         (swap! unused conj attr)))
     @unused))
 
@@ -129,7 +129,7 @@
                           forms))
                       []
                       (su/list-schemas))]
-    (d/transact conn forms)))
+    (d/transact (connect-atm) forms)))
 
 (defn fix-includes! ; Just used on OAGIS schema, UBL-CommonExtensionComponents-2.3.xsd AFAIK.
   "Files have :mm/tempInclude which are paths (typically relative)
@@ -138,7 +138,7 @@
   (let [temps (d/q '[:find ?ent ?i ?p :keys s/ent s/include-file s/s-path :where
                      [?ent :mm/tempInclude ?i]
                      [?ent :schema/pathname ?p]]
-                   @conn)
+                   @(connect-atm))
         with-urn (map (fn [temp]
                         (let [[_ up _ ipath] (re-matches #"^((\.\./)*)(.*)$" (:s/include-file temp))
                               schema-path (clojure.java.io/file (:s/s-path temp))
@@ -148,12 +148,12 @@
                           (if-let [urn (d/q `[:find ?urn . :where
                                               [?e :schema/pathname ~file]
                                               [?e :schema/name ?urn]]
-                                            @conn)]
+                                            @(connect-atm))]
                             (assoc temp :s/include urn)
                             (do (log/warn "While resolving includes, cannot find schema with :schema/pathname" file)
                                 temp))))
                       temps)]
-    (d/transact conn
+    (d/transact (connect-atm)
                 (mapv #(-> {}
                            (assoc :db/id (:s/ent %))
                            (assoc :schema/includedSchemas (:s/include %)))
@@ -173,12 +173,11 @@
   "Create the database if :rebuild? is true, otherwise just set the connection atom, conn."
   []
   (util/config-log :info)
-  (when (:rebuild-db? db-cfg)
+  (when (:rebuild-db? @db-cfg-atm)
     (reset! bad-file-on-rebuild? #{})
-    (when (d/database-exists? db-cfg) (d/delete-database db-cfg))
-    (d/create-database db-cfg)
-    (alter-var-root (var conn) (fn [_] (d/connect db-cfg)))
-    (d/transact conn db-schema)
+    (when (d/database-exists? @db-cfg-atm) (d/delete-database @db-cfg-atm))
+    (d/create-database @db-cfg-atm)
+    (d/transact (connect-atm) db-schema)
     (add-schema-files! (str ubl-root "maindoc"))
     (add-schema-files! (str ubl-root "common"))
     (add-schema-files! (str oagis-10-8-root "Nouns"))
@@ -189,22 +188,8 @@
     (postprocess-schemas!)
     (log/info "Created schema DB")))
 
-(defn get-db-atm
-  "Do a d/connect to the database, returning a connection atom."
-  []
-  (if (d/database-exists? db-cfg)
-    (d/connect db-cfg)
-    (log/warn "There is no example DB to connect to.")))
-
-(defn connect-db
-  "Set the var rad-mapper.schema-db/conn by doing a d/connect."
-  []
-  (if (d/database-exists? db-cfg)
-    (alter-var-root (var conn) (fn [_] (d/connect db-cfg))),
-    (log/warn "There is no DB to connect to.")))
-
 (defstate schema
   :start
   (do
     (util/config-log :info)
-    (connect-db)))
+    (connect-atm)))

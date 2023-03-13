@@ -1,15 +1,16 @@
 (ns schema-db.pathom
+  "This is Pathom2 stuff. It is gone!"
   (:require
    [clojure.core.async :as async :refer [<!!]]
-   [com.wsscode.pathom.connect :as pc :refer [defresolver]]
-   [com.wsscode.pathom.core :as p]
+   ;[com.wsscode.pathom.connect :as pc :refer [defresolver]]
+   ;[com.wsscode.pathom.core :as p]
    [mount.core :refer [defstate]]
    [schema-db.resolvers    :refer [resolvers]]
    [taoensso.timbre          :as log]))
 
 ;;; Some of this from Chris O'Donnell's excellent blogging.
 ;;; See https://chrisodonnell.dev/posts/giftlist/initial_backend/
-(defresolver index-explorer [env _]
+#_(defresolver index-explorer [env _]
   {::pc/input  #{:com.wsscode.pathom.viz.index-explorer/id}
    ::pc/output [:com.wsscode.pathom.viz.index-explorer/index]}
   {:com.wsscode.pathom.viz.index-explorer/index
@@ -19,9 +20,9 @@
      (update ::pc/index-mutations
        #(into {} (map (fn [[k v]] [k (dissoc v ::pc/mutate)])) %)))})
 
-(def all-resolvers [index-explorer resolvers])
+#_(def all-resolvers [index-explorer resolvers])
 
-(defn preprocess-parser-plugin
+#_(defn preprocess-parser-plugin
   "Helper to create a plugin that can view/modify the env/tx of a
   top-level request.
   f - (fn [{:keys [env tx]}] {:env new-env :tx new-tx})
@@ -36,12 +37,11 @@
            (parser env tx)
            {}))))})
 
-
-(defn log-requests [{:keys [_ tx] :as req}]
+#_(defn log-requests [{:keys [_ tx] :as req}]
   (log/debug "Pathom transaction:" (pr-str tx))
   req)
 
-(defstate parser
+#_(defstate parser
   :start
   (let [real-parser
         (p/parallel-parser

@@ -4,9 +4,10 @@
    [clojure.test :refer [deftest is testing]]
    [datahike.api             :as d]
    [datahike.pull-api        :as dp]
-   [schema-db.core           :as core :refer [connect-db]]
+   [schema-db.core           :as core]
+   [schema-db.db-util        :as du  :refer [connect-atm]]
    [schema-db.generic-schema :as gs]
-   [schema-db.resolvers      :as res :refer [pathom-resolve]]))
+   #_[schema-db.resolvers      :as res :refer [pathom-resolve]]))
 
 (defn schema-for-sdo
   "Return a list of schema for the argument SDO."
@@ -15,7 +16,7 @@
          :in $ ?sdo
          :where [?e :schema/sdo ?sdo]
                 [?e :schema/name ?name]]
-       @(connect-db) sdo))
+       @(connect-atm) sdo))
 
 (deftest counting-schema
   (testing "Testing that the number of schema for each SDO/version are as expected."
