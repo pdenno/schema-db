@@ -131,5 +131,5 @@
               such as a db/ident, the value of which is a value for the identity condition.
    outputs: a vector of properties (the :pco/outputs of resolvers) that are sought."
   [ident-map outputs]
-  (log/info "Pathom resolve: ident-map = " ident-map " outputs= " outputs)
+  (log/info "Pathom resolve: db = " @(connect-atm) " ident-map = " ident-map " outputs= " outputs)
   (p.eql/process indexes ident-map outputs))
