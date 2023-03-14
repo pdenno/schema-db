@@ -1,16 +1,12 @@
 (ns schema-db.resolvers
   "This is temporarily part of rad-mapper. This plus schema-db.clj ought to be their own libaray"
   (:require
-   ;[com.wsscode.pathom.core      :as p]
-   ;[com.wsscode.pathom.connect   :as pc]
-   [com.wsscode.pathom3.connect.indexes :as pci] ; See  https://pathom3.wsscode.com/docs/
+   [com.wsscode.pathom3.connect.indexes :as pci]
    [com.wsscode.pathom3.connect.operation :as pco]
-   [com.wsscode.pathom3.interface.smart-map :as psm]
-   ;[com.wsscode.pathom3.interface.eql :as p.eql]
+   [com.wsscode.pathom3.interface.eql :as p.eql]
    [datahike.api        :as d]
    [datahike.pull-api   :as dp]
-   [schema-db.db-util   :as du :refer [connect-atm]]
-   [schema-db.schema-util :as su]))
+   [schema-db.db-util   :as du :refer [connect-atm]]))
 
 ;;;============================ Resolvers (communication with clients)  ==================================
 ;;; I think the key idea here for pathom-mediated composabiltiy is for each resolver to rename all db/id
@@ -79,8 +75,7 @@
 ;;; (pathom-resolve [{[:schema/name invoice] [{:model/sequence [:sp/name :sp/type :sp/minOccurs :sp/maxOccurs]}]}]) ; COMPLETE!
 ;;; (pathom-resolve [{[:sdb/schema-id 1230] [{:model/sequence [:sp/name :sp/type :sp/minOccurs :sp/maxOccurs]}]}]) ; COMPLETE!
 (pco/defresolver elem-props [env {:sdb/keys [elem-id]}]
-  {::pco/input  [:sdb/elem-id]
-   ::pco/output [:doc/docString
+  {::pco/output [:doc/docString
                 :sp/name
                 :sp/type
                 :sp/minOccurs
@@ -96,8 +91,7 @@
 ;;; ToDo: Of course, this needs to take an argument or be part of a user's project, etc.
 ;;; (pathom-resolve [{[:file/id :map-spec] [:user/data-file]}])
 (pco/defresolver data-file [env {:file/keys [id]}]
-  {::pco/input  [:file/id]
-   ::pco/output [:file/text]}
+  {::pco/output [:file/text]}
   (case id
     :source-data {:file/text (slurp "./data/messages/UBL-Invoice-2.1-Example.xml")}
     :target-data {:file/text " "}
@@ -122,10 +116,18 @@
 
 (def indexes
   (pci/register [schema-name->sdb-schema-id
-                 sdb-schema-id->schema-obj
+                 sdb-schema-id->sdb-schema-obj
                  sdb-schema-id->props
                  elem-props
                  list-id->list-schemas
                  message-schema
                  data-file
                  current-system-time]))
+
+(defn pathom-resolve
+  "Uses the indexes to respond to a query.
+   ident-map: a single-entry map, the key of which names an identity condition,
+              such as a db/ident, the value of which is a value for the identity condition.
+   outputs: a vector of properties (the :pco/outputs of resolvers) that are sought."
+  [ident-map outputs]
+  (p.eql/process indexes ident-map outputs))
