@@ -6,7 +6,8 @@
    [com.wsscode.pathom3.interface.eql :as p.eql]
    [datahike.api        :as d]
    [datahike.pull-api   :as dp]
-   [schema-db.db-util   :as du :refer [connect-atm]]))
+   [schema-db.db-util   :as du :refer [connect-atm]]
+   [taoensso.timbre     :as log]))
 
 ;;;============================ Resolvers (communication with clients)  ==================================
 ;;; I think the key idea here for pathom-mediated composabiltiy is for each resolver to rename all db/id
@@ -130,4 +131,5 @@
               such as a db/ident, the value of which is a value for the identity condition.
    outputs: a vector of properties (the :pco/outputs of resolvers) that are sought."
   [ident-map outputs]
+  (log/info "Pathom resolve: ident-map = " ident-map " outputs= " outputs)
   (p.eql/process indexes ident-map outputs))
