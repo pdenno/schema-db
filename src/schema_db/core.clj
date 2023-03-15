@@ -46,10 +46,6 @@
         (str base-dir "/sources")
         (throw (ex-info "Directory not found:" {:dir (str base-dir "/sources")}))))
 
-(reset! db-cfg-atm {:store {:backend :file :path db-dir}
-                    :rebuild-db? false
-                    :schema-flexibility :write})
-
 (def diag (atom nil))
 
 ;;; ToDo: Make the following environment variables.
@@ -188,8 +184,11 @@
     (postprocess-schemas!)
     (log/info "Created schema DB")))
 
-(defstate schema
+(defstate core
   :start
   (do
     (util/config-log :info)
-    (connect-atm)))
+    (reset! db-cfg-atm {:store {:backend :file :path db-dir}
+                        :rebuild-db? false
+                        :schema-flexibility :write})
+    (log/info "Starting schema-db: db connection = " @(connect-atm))))

@@ -18,13 +18,13 @@
 ;;; See also person-resolver at Part 6, 43:26.
 
 ;;; Note that when you send an Ident, you get back a map with that ident and the response <=========
-;;; (pathom-resolve [{[:schema/name "urn:oasis:names:specification:ubl:schema:xsd:Invoice-2"] [:sdb/schema-id]}])
-;;; (pathom-resolve [{[:schema/name "urn:oagis-10.8.4:Nouns:Invoice"] [:sdb/schema-id]}])
+;;; (pathom-resolve {:schema/name "urn:oasis:names:specification:ubl:schema:xsd:Invoice-2"} [:sdb/schema-id])
+;;; (pathom-resolve {:schema/name "urn:oagis-10.8.4:Nouns:Invoice"} [:sdb/schema-id])
 ;;; ==> {[:schema/name "urn:oasis:names:specification:ubl:schema:xsd:Invoice-2"] #:sdb{:schema-id 1230}}
 (pco/defresolver schema-name->sdb-schema-id [_env {:schema/keys [name]}]
   {:sdb/schema-id (d/q `[:find ?e . :where [?e :schema/name ~name]] @(connect-atm))})
 
-;;; (pathom-resolve [{[:schema/name "urn:oagis-10.8.4:Nouns:Invoice"] [:sdb/schema-object]}])
+;;; (pathom-resolve {:schema/name "urn:oagis-10.8.4:Nouns:Invoice"} [:sdb/schema-object])
 ;;; [{"schema/name" : "urn:oagis-10.8.4:Nouns:Invoice"}, ["schema-object"]]
 (pco/defresolver sdb-schema-id->sdb-schema-obj [env {:sdb/keys [schema-id]}]
   {:sdb/schema-object (du/resolve-db-id {:db/id schema-id} (connect-atm) #{:db/id})})

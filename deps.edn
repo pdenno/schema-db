@@ -5,7 +5,6 @@
            com.cemerick/url               {:mvn/version "0.1.1"}
            com.taoensso/timbre            {:mvn/version "6.1.0"}
            com.wsscode/pathom3            {:mvn/version "2022.10.19-alpha"}
-           ;com.wsscode/pathom             {:mvn/version "2.4.0"}
            dk.ative/docjure               {:mvn/version "1.19.0"}  ; spreadsheets
            io.replikativ/datahike         {:mvn/version "0.6.1538"} ; Remember to rebuild databases on update.
            mount/mount                    {:mvn/version "0.1.17"} ; ToDo: Maybe temporary for schema-db/pathom
