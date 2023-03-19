@@ -6,10 +6,10 @@
    [datahike.api                 :as d]
    [datahike.pull-api            :as dp]
    [schema-db.db-util :as du     :refer [connect-atm xpath xml-type?]]
-   [schema-db.schema  :as schema :refer [simple-xsd? generic-schema-type? special-schema-type?]]
+   [schema-db.schema  :as schema :refer [simple-xsd? generic-schema-type? special-schema-type? bie-simple-type?]]
    [taoensso.timbre              :as log]))
 
-;;; This does file-level dispatching as well as the details
+;;; This does file-level dispatching as well as the details.
 (defn rewrite-xsd-dispatch
   [obj & [specified]]
    (let [stype (:schema/type obj)
@@ -28,8 +28,9 @@
                (special-schema-type? stype) stype,
                (generic-schema-type? stype) stype,
 
-               ;; Odd cases
-               (and (map? obj) (contains? simple-xsd? (:xml/tag obj)))        :simple-xsd,
+               ;; Special simplifications
+               (and (map? obj) (contains? simple-xsd?       (:xml/tag obj)))  :simple-xsd,
+               (and (map? obj) (contains? bie-simple-type?  (:xml/tag obj)))  :simple-bie,
                (and (map? obj) (contains? obj :xml/tag))                      (:xml/tag obj),
                (and (map? obj) (contains? obj :ref))                          :ref
                ; ToDo: this one for polymorphism #{:xsd/element :xsd/choice} etc.
@@ -44,8 +45,9 @@
    The xsd:appinfo optional content is ignored."
   [obj]
   (if (or *skip-doc-processing?*
-          (not (map? obj)) ; ToDo: This and next are uninvestigated problems in the etsi files.
-          (not (contains? obj :xml/content)))
+          (-> obj :xml/content string?)
+          #_(not (map? obj)) ; ToDo: This and next are uninvestigated problems in the etsi files.
+          #_(not (contains? obj :xml/content))) ; 2023-03-17 I commented those out and added string? test.
     [obj nil]
     (let [parts (group-by #(xml-type? % :xsd/annotation) (:xml/content obj))
           annotes (get parts true)
@@ -189,7 +191,7 @@
     :oagis  "10"
     :qif    (let [[_ n] (re-matches #"^http://qifstandards.org/xsd/qif(\d)" (schema-ns xmap))]
               (or n ""))
-    ""))
+    "unknown"))
 
 (defn schema-subversion
   "Return the subversion. NB: Currently this is hard coded. Should be an environment variable." ; ToDo: need env.
@@ -200,14 +202,16 @@
           (= spec :oagis)
           (let [[_ subver] (re-matches #".*OAGIS/[0-9]+\.([0-9,\.]+).*" pname)]
             (or subver
-                (log/warn "Could not determine OAGIS subversion.")))
+                (log/warn "Could not determine OAGIS subversion.")
+                "unknown"))
           (= spec :cefact-ccl) "" ; ToDo: See also UBL CCL.
-          :else "")))
+          :else "unknown")))
 
 ;;; ToDo: Make this a multi-method (on the case values)
 (defn schema-type
   "Return a keyword signifying the specification of which the schema is part.
-   These are #{:ubl-2, :oagis-10, etc.}. It is used as :schema/spec"
+   These are #{:ubl-2, :oagis-10, etc.}. It is used as :schema/spec
+   This is just a first guess; see schema/update-schema-type."
   [xmap]
   (let [ns (schema-ns xmap)
         sdo (:schema/sdo xmap)
@@ -295,6 +299,69 @@
       (let [fname (-> pname (str/split #"/") last)]
         (log/warn "Could not determine schema name:" pname " Using " fname)
         fname))))
+
+(defn update-schema-type
+  "After you've parsed the whole schema, its type is much more apparent.
+   Specifically, what was :ccts/message-schema might be be a :ccts/bie."
+  [schema]
+  (let [bie? (atom false)]
+    (letfn [(b? [obj]
+              (cond @bie? true
+                    (map? obj)    (doseq [[k v] (seq obj)]
+                                    (when (= k :bie/ccts_BusinessContext)
+                                      (reset! bie? true))
+                                    (b? v))
+                    (vector? obj) (doall (map b? obj))))]
+      (b? schema)
+      (log/info "Final :schema/type changed?: " @bie?)
+      (cond-> schema
+        @bie? (assoc :schema/type :ccts/bie)))))
+
+(def diag (atom nil))
+
+(defn squash-temp-sequences
+  "For convenience, parsing XML can add some things as :temp/sequence where the elements should all be maps.
+   This replaces the :temp/sequence map with its value."
+  [obj]
+  (letfn [(sts [obj]
+            (cond (map? obj)     (reduce-kv (fn [m k v] ; Of course this won't catch a top-level :temp/sequence.
+                                              (if (and (map? v) (contains? v :temp/sequence)) ; ToDo: This is a 'devl' test.
+                                                (do (when-not (every? map? (:temp/sequence v))
+                                                      (reset! diag v)
+                                                      (throw (ex-info ":temp/sequence w/o map values:" {:k k :v v})))
+                                                    (assoc m k (->> v :temp/sequence (mapv sts))))
+                                                (assoc m k (sts v))))
+                                            {}
+                                            obj),
+                  (vector? obj) (mapv sts obj)
+                  :else         obj))]
+    (sts obj)))
+
+;;; ToDo: This isn't used yet. Might not be needed.
+#_(defn create-lookup-refs
+  "Return a vector of datahike:    {:db/add -1 attr val}
+                      datascript:  {:db/id   n attr val}, where n={1,2,3...}
+   corresponding to entities to establish before sending data.
+   From datahike api.cljc:
+                      ;; create a new entity ('-1', as any other negative value, is a tempid
+                      ;; that will be replaced by Datahike with the next unused eid)
+                      (transact conn [[:db/add -1 :name \"Ivan\"]])"
+  [schema data cljs?]
+  (let [db (if cljs? :datascript :datahike)
+        lookup-refs (atom #{})
+        cnt (atom 0)
+        ref-ident? (reduce-kv (fn [r k v] (if (contains? v :db/unique) (conj r k) r)) #{} schema)]
+    (letfn [(dlr [obj]
+              (cond (map? obj)    (doseq [[k v] (seq obj)] ; v should already be a string. ToDo: It isn't!
+                                    (when (and (ref-ident? k) (not (known-lookup? @lookup-refs k v db)))
+                                        (swap! lookup-refs conj (case db
+                                                                  :datascript {:db/id (swap! cnt inc) k v}
+                                                                  :datahike   [:db/add -1 k v])))
+                                    (dlr v))
+                    (vector? obj) (doall (map dlr obj))))]
+      (dlr data)
+      (-> @lookup-refs vec))))
+
 
 ;;;=========================== Schema Operations ===========================================
 (defn list-schemas

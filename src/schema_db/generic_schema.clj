@@ -68,7 +68,7 @@
   (-> path
       read-clean
       rewrite-xsd
-      dbu/condition-form vector))
+      dbu/condition-form))
 
 ;;;===============  File Level =========================================================
 ;;; ToDo: Adapted from :oasis/component-schema, which suggests that that could use this.
@@ -115,7 +115,7 @@
   [xmap]
   (when-not (== 1 (count (:xml/content xmap)))
     (log/warn "xsd:complexContent has many :xml/content.")
-    (rewrite-xsd (-> xmap :xml/content first))))
+    {:model/complexType (rewrite-xsd (-> xmap :xml/content first))}))
 
 (defparse :xsd/any
   [xmap]
@@ -134,38 +134,7 @@
 (defparse :xsd/sequence
   [xmap]
   (let [content (:xml/content xmap)]
-    ;(if (= 1 (count content))
-    ; (rewrite-xsd (first content)) ; ToDo: OK practice? The caller has to handle a ref.
-      {:model/sequence (mapv rewrite-xsd content)}))
-
-(defparse :xsd/element
-  [xelem]
-  (assert (and (xml-type? xelem :xsd/element)
-               (or (-> xelem :xml/attrs :ref)     ; UBL, OAGIS/Components.xsd
-                   (-> xelem :xml/attrs :name)))) ; ISO/OAGIS, :generic/xsd-file.
-  (let [attrs   (:xml/attrs xelem)
-        doc     (xpath- xelem :xsd/annotation :xsd/documentation) ; Not commonly used! (Is used in  MF challenge problem.)
-        doc?    (when-not (-> doc :xml/content string?) doc)
-        comp?   (when doc? (rewrite-xsd doc? :cct/component))
-        doc-str (when (-> doc :xml/content string?) (:xml/content doc))
-        cplx?   (xpath- xelem :xsd/complexType)] ; Generic schema example, Elena's.
-    (cond-> {}
-      (:ref  attrs)       (assoc :sp/name (:ref  attrs))
-      (:name attrs)       (assoc :sp/name (:name attrs))
-      (:type attrs)       (assoc :sp/type (:type attrs))
-      (:use  attrs)       (assoc :sp/user (:use  attrs))
-      (:minOccurs attrs)  (assoc :sp/minOccurs (-> attrs :minOccurs keyword))
-      (:maxOccurs attrs)  (assoc :sp/maxOccurs (-> attrs :maxOccurs keyword))
-      doc?                (assoc :sp/function {:fn/type :cct/component}),
-      comp?               (assoc :sp/component comp?)
-      doc-str             (assoc :sp/docString doc-str)
-      cplx?               (assoc :schema/complexTypes
-                                  (as-> (rewrite-xsd cplx? :xsd/complexType) ?t
-                                    (if (:sp/type ?t)
-                                      (assoc ?t :term/type (:sp/type ?t))
-                                      ?t)
-                                    (dissoc ?t :sp/type)))
-      true (assoc :sp/function {:fn/type :gelem}))))
+    {:model/sequence (mapv rewrite-xsd content)}))
 
 ;;; ToDo: better that this would be a set of things unhandled.
 ;;; Write them as :mm/unhandledXML (a stringified map).
@@ -196,7 +165,7 @@
   [xchoice]
   {:xsd/choice (mapv rewrite-xsd (:xml/content xchoice))})
 
-;;;
+;;; (0) This should create a :model/complexType (also don't create a :model/sequence child).
 (defparse :xsd/complexType
   [xmap]
   (let [name (-> xmap :xml/attrs :name)]
@@ -205,16 +174,13 @@
             (-> (xpath ?r :xsd/complexContent) :xml/content first rewrite-xsd)
             (xpath ?r :xsd/simpleContent)
             (-> (xpath ?r :xsd/simpleContent) :xml/content first rewrite-xsd)
-            ;; Weirdness in next two forms to handle explicit xsd:/sequence and possible
-            ;; other stuff (a vector of content) which I am likewise treating as a :model/sequence.
-            (== 1 (-> ?r :xml/content count))
-            (rewrite-xsd (-> ?r :xml/content first))
             :else
-            {:model/sequence (mapv rewrite-xsd (:xml/content ?r))})
+            {:temp/sequence-1 (->> (mapcat rewrite-xsd (:xml/content ?r)) vec)})
       (if name (assoc ?r :sp/name name) ?r)
       (if (= "true" (-> xmap :xml/attrs :abstract))
         (assoc ?r :sp/abstract true)
-        ?r))))
+        ?r)
+      {:model/complexType ?r})))
 
 ;;; This just returns the string pointing to a .xsd file. Those will be replaced in postprocessing.
 (defparse :xsd/include
@@ -238,6 +204,8 @@
   [obj]
   {:xsd/listItemType (-> obj :xml/attrs :itemType str)})
 
+;;; This one is for everything in the mapschema/simple-xsd? {:xsd/length  :number, ...}
+;;; Note that the tag is unchanged.
 (defparse :simple-xsd
   [obj]
   (let [tag (:xml/tag obj)]
@@ -246,6 +214,7 @@
        (-> obj :xml/attrs :value read-string)
        (-> obj :xml/attrs :value))}))
 
+;;; (9) :xsd/extend :xsd/restrict don't have sequences; don't add one. Return the restriction.
 (defparse :extend-restrict-content
   [content]
   (let [enums (atom [])
@@ -255,7 +224,7 @@
                      content)]
     (if (not-empty @enums)
       {:model/enumeration @enums},
-      {:model/sequence result})))
+      {:temp/sequence result})))
 
 (defparse :xsd/attributeGroup
   [xmap]

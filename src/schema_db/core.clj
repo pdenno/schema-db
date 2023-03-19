@@ -24,6 +24,14 @@
    [schema-db.util               :as util]
    [taoensso.timbre              :as log]))
 
+;;; (1) Generally speaking, parse methods should return a map corresponding to the thing parsed;
+;;;     it should not be left up to the caller to do that.
+;;; (2) For convenience in debugging, I generate some temp stuff.
+;;;     For example :temp/sequence are to be replaced by a their vector value, the elements of which are maps.
+;;;     :model/sequence should imply a modeling intent such as from :xsd/sequence.
+;;; (3) It is assumed that the generation of db.cardinality/many things is localized.
+;;;     There aren't safeguards against assoc replacing a value already generated.
+
 ;;; ToDo:
 ;;;    * The best thing to do with docs is alway collect them, but eliminate them in presentation like I optionally do with :db/id.
 ;;;    * elem-props-r only works for UBL schema.
@@ -53,6 +61,7 @@
 (def oagis-10-8-root  (str src-dir "/OAGIS/10.8.4/ModuleSet/Model/"))
 (def qif-root         (str src-dir "/QIF/3.0/xsd/"))
 (def michael-root     (str src-dir "/michaelQIF/"))
+(def elena-root       (str src-dir "/misc/elena/2023-02-09/"))
 
 (defonce bad-file-on-rebuild? (atom #{})) ; For debugging
 
@@ -61,7 +70,12 @@
 (defn add-schema-file!
   [path]
   (reset! diag-path path)
-  (let [db-content (read-schema-file path)]
+  (let [db-content
+        (-> path
+            read-schema-file
+            su/squash-temp-sequences
+            su/update-schema-type
+            vector)]
     (try
       (if (du/storable? db-content)
         (try (d/transact (connect-atm) db-content) ; Use d/transact here, not transact! which uses a future.
@@ -162,9 +176,6 @@
   (fix-includes!)
   (update-bad-files!))
 
-;;;================================ Starting and Stopping ===========================================
-;;; (user/restart) whenever you update the DB or the resolvers. (tools/refresh) if compilation fails.
-
 (defn create-db!
   "Create the database if :rebuild? is true, otherwise just set the connection atom, conn."
   []
@@ -174,21 +185,24 @@
     (when (d/database-exists? @db-cfg-atm) (d/delete-database @db-cfg-atm))
     (d/create-database @db-cfg-atm)
     (d/transact (connect-atm) db-schema)
-    (add-schema-files! (str ubl-root "maindoc"))
-    (add-schema-files! (str ubl-root "common"))
-    (add-schema-files! (str oagis-10-8-root "Nouns"))
-    (add-schema-files! (str oagis-10-8-root "Platform/2_7/Common"))
-    (add-schema-files! (str qif-root "QIFApplications"))
-    (add-schema-files! (str qif-root "QIFLibrary"))
+    ;(add-schema-files! (str ubl-root "maindoc"))
+    ;(add-schema-files! (str ubl-root "common"))
+    ;(add-schema-files! (str oagis-10-8-root "Nouns"))
+    ;(add-schema-files! (str oagis-10-8-root "Platform/2_7/Common"))
+    ;(add-schema-files! (str qif-root "QIFApplications"))
+    ;(add-schema-files! (str qif-root "QIFLibrary"))
+    (add-schema-files! elena-root)
     ;;(add-schema-files! michael-root) ; Currently has nils
     (postprocess-schemas!)
     (log/info "Created schema DB")))
 
+;;;================================ Starting and Stopping ===========================================
+;;; (user/restart) whenever you update the DB or the resolvers. (tools/refresh) if compilation fails.
 (defstate core
   :start
   (do
     (util/config-log :info)
     (reset! db-cfg-atm {:store {:backend :file :path db-dir}
-                        :rebuild-db? false
+                        :rebuild-db? true
                         :schema-flexibility :write})
     (log/info "Starting schema-db: db connection = " @(connect-atm))))

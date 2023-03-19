@@ -8,5 +8,4 @@
            com.wsscode.promesa.macros/clet                   clojure.core/let
            com.wsscode.promesa.macros/ctry                   clojure.core/try
            mount.core/defstate                               clj-kondo.lint-as/def-catch-all
-           schema-db.macros/defparse                         clojure.core/defn}}
-
+           schema-db.generic-schema/defparse                 clojure.core/defn}}

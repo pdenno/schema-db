@@ -2,12 +2,8 @@
   "Code for common concepts of CCT messaging schema."
   (:require
    [clojure.pprint              :refer [cl-format]]
-   [clojure.spec.alpha          :as s]
-   [clojure.string              :as str]
-   [datahike.api                :as d]
-   [datahike.pull-api           :as dp]
    [schema-db.db-util           :as du     :refer [connect-atm xpath xpath- xml-type?]]
-   [schema-db.schema            :as schema :refer [db-schema]]
+   [schema-db.schema            :as schema :refer [db-schema+]]
    [schema-db.schema-util       :as su]
    [schema-db.generic-schema    :as gen-s  :refer [defparse rewrite-xsd imported-schemas]]
    [taoensso.timbre             :as log]))
@@ -17,6 +13,8 @@
   [xmap]
   (rewrite-xsd xmap :generic/xsd-file))
 
+;;; (8) Return a :model/spec
+;;;     The :model/sequence here can be a vector instead???
 (defparse :ubl/message-schema
   [xmap]
   (let [short-name (second (re-matches  #"[\w,\:\d]+\:(\w+)\-\d" (:schema/name xmap)))]
@@ -29,10 +27,12 @@
         ?x)
       (if-let [elems (not-empty (filter #(xml-type? % :xsd/element)
                                         (:xml/content (xpath ?x :xsd/schema))))]
-        (assoc ?x :model/sequence (mapv #(rewrite-xsd % :xsd/element) elems))
+        (assoc ?x :temp/sequence (mapv #(rewrite-xsd % :xsd/element) elems))
         ?x)
-      (dissoc ?x :xml/ns-info :xml/content))))
+      (dissoc ?x :xml/ns-info :xml/content)
+      {:model/spec ?x})))
 
+;;; (7) Same problem (and fix) as 8.
 (defparse :oagis/message-schema
   [xmap {:skip-doc-processing? true}]
   (binding [su/*skip-doc-processing?* true] ; ToDo: not ready for this!
@@ -40,15 +40,41 @@
           includes  (not-empty  (filter #(xml-type? % :xsd/include) content))
           top-elems (not-empty  (filter #(xml-type? % :xsd/element) content))
           top       (first top-elems)
-          inlined   (not-empty (filter #(xml-type? % :xsd/complexType) content))]
-      (cond-> xmap
-        includes  (assoc :mm/tempInclude (mapv #(rewrite-xsd %) includes))
-        top       (assoc :model/sequence  (vector (rewrite-xsd top :xsd/element)))
-        top-elems (assoc :sp/typeRef (mapv #(-> (rewrite-xsd % :xsd/element)
-                                                 (assoc :sp/function {:fn/type :type-ref}))
-                                            top-elems))
-        inlined   (assoc :schema/inlinedTypedefs (mapv #(rewrite-xsd % :xsd/inline-typedef) inlined))
-        true      (dissoc :xml/content :xml/ns-info)))))
+          inlined   (not-empty (filter #(xml-type? % :xsd/complexType) content))
+          res (cond-> xmap
+                includes  (assoc :mm/tempInclude (mapv #(rewrite-xsd %) includes))
+                top       (assoc :temp/sequence  (vector (rewrite-xsd top :xsd/element)))
+                top-elems (assoc :sp/typeDef (mapv #(-> (rewrite-xsd % :xsd/element)
+                                                        (assoc :sp/function {:fn/type :type-ref}))
+                                                   top-elems))
+                inlined   (assoc :schema/inlinedTypedefs (mapv #(rewrite-xsd % :xsd/inline-typedef) inlined))
+                true      (dissoc :xml/content :xml/ns-info))]
+      {:model/spec res})))
+
+(defparse :xsd/element
+  [xelem]
+  (assert (and (xml-type? xelem :xsd/element)
+               (or (-> xelem :xml/attrs :ref)     ; UBL, OAGIS/Components.xsd
+                   (-> xelem :xml/attrs :name)))) ; ISO/OAGIS, :generic/xsd-file.
+  (let [attrs   (:xml/attrs xelem)
+        doc?    (rewrite-xsd xelem :any/doc)
+        cplx?   (xpath- xelem :xsd/complexType)] ; Generic schema example, Elena's.
+    (cond-> {}
+      (:ref  attrs)       (assoc :sp/name (:ref  attrs))
+      (:name attrs)       (assoc :sp/name (:name attrs))
+      (:type attrs)       (assoc :sp/type (:type attrs))
+      (:use  attrs)       (assoc :sp/user (:use  attrs))
+      (:minOccurs attrs)  (assoc :sp/minOccurs (-> attrs :minOccurs keyword))
+      (:maxOccurs attrs)  (assoc :sp/maxOccurs (-> attrs :maxOccurs keyword))
+      (map? doc?)         (merge doc?)
+      (string? doc?)      (assoc :sp/docString doc?)
+      cplx?               (assoc :schema/complexTypes
+                                  (as-> (rewrite-xsd cplx? :xsd/complexType) ?t
+                                    (if (:sp/type ?t)
+                                      (assoc ?t :term/type (:sp/type ?t))
+                                      ?t)
+                                    (dissoc ?t :sp/type)))
+      true (assoc :sp/function {:fn/type :gelem}))))
 
 ;;; Some of these (see UBL-UnqualifiedDataTypes-2.3.xsd) have useful content in :xsd/documentation.
 ;;; Toplevels for some schema:
@@ -138,57 +164,52 @@
                               (filter #(xml-type? % :xsd/complexType) content))))
         (dissoc :xml/content :xml/ns-info))))
 
-;;;--------------------- End File Level ------------------------------------------
+;;;--------------------- Details (not files) ------------------------------------------
+(def cct-special-cases
+  #:ROOT{:ccts_GUID                    :cct/GUID
+         :ccts_sc-id                   :cct/scId,
+         :ccts_sc-type                 :cct/scType,
+         :ccts_sc-use                  :cct/scUse,
+         :ccts_BusinessContext         :cct/BusinessContext
+         :ccts_BasedASCCRevisionNumber :cct/ASCCRevisionNumber
+         :ccts_BasedACCRevisionNumber  :cct/ACCRevisionNumber
+         :ccts_BasedBCCRevisionNumber  :cct/BCCRevisionNumber
+         :ccts_BasedASCCDefinition     :cct/ASCCDefinition
+         :ccts_BasedACCDefinition      :cct/ACCDefinition
+         :ccts_BasedBCCDefinition      :cct/BCCDefinition})
 
-;;;---------------------------------- 'Custom' ---------------------------------------------------
-(def cct-renames
-  {:ccts/Cardinality :cct/Cardinality,
-   :ccts/CategoryCode  :cct/CategoryCode,
-   :ccts/DataTypeTermName :cct/DataTypeTermName,
-   :ccts/Definition :cct/Definition,
-   :ccts/Description :cct/Description,
-   :ccts/DictionaryEntryName :cct/DictionaryEntryName,
-   :ccts/Name :cct/Name,
-   :ccts/ObjectClass :cct/ObjectClass,
-   :ccts/PrimitiveType :cct/PrimitiveType,
-   :ccts/PropertyTermName :cct/PropertyTermName,
-   :ccts/QualifierTerm :cct/QualifierTerm,
-   :ccts/RepresentationTermName :cct/RepresentationTermName,
-   :ccts/UniqueID :cct/UniqueID,
-   :ccts/UsageRule :cct/UsageRule,
-   :ccts/VersionID :cct/VersionID,
-   :ccts/sc-id :cct/scId,
-   :ccts/sc-type :cct/scType,
-   :ccts/sc-use :cct/scUse,
-   :ccts/supplemental :cct/supplemental})
+(def cct-tag2db-ident-map
+  "Translate names of properties found in standard schema to the equivalent used in the database."
+  (let [db-key-names (->> db-schema+ keys (filter #(= "cct" (namespace %))))
+        tag-names (map #(keyword "ROOT" (str "ccts_" (name %))) db-key-names)]
+    (merge (zipmap tag-names db-key-names) cct-special-cases)))
 
-(def oagis2ccts-key-map
-  "Translate names of properties found in OAGIS to the equivalent used in the database."
-  (let [key-names (->> db-schema (map #(get % :db/ident)) (filter #(and % (= (namespace %) "cct"))))
-        oagis-names (map #(keyword "ROOT" (str "ccts_" (name %))) key-names)]
-    (zipmap oagis-names key-names)))
+(def diag (atom nil))
 
-(defn fix-ccts-keys
-  "Some files uses keywords qualified by 'ccts', I use 'cct' everywhere."
-  [k]
-  (or (cct-renames k) (oagis2ccts-key-map k) k))
-
-(defn cc-from-doc
-  "Return a map describe a core component or supplementary component from the
-   argument :xsd/documentation."
+;;; Process any documentation or annotation to whatever form is most appropriate.
+(defparse :any/doc
   [xmap]
-  (assert (xml-type? xmap :xsd/documentation))
-  (not-empty (reduce (fn [m info]
-                       (if-let [content (:xml/content info)]
-                         (assoc m (-> info :xml/tag fix-ccts-keys) content)
-                         m))
-                     {}
-                     (:xml/content xmap))))
+  (when-let [note? (xpath- xmap :xsd/annotation)]
+    ;; An :xsd/annotation can contain multiple :xsd/documentation.
+    ;; An :xsd/documentation can contain multiple CCT-specific element, e.g.
+    ;; ccts_BasedASCCPRevisionNumber. Some of these elements, especially the BIEs,
+    ;; might have a 'source' attribute.
+    ;; I see no reason not to merge the xsd:docs that occur within xsd:annote.
+    (let [docs (filter #(xml-type? % :xsd/documentation) (:xml/content note?))]
+  ;;<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< Now finish it!
 
-(defparse :cct/component
-  [xmap]
-  (assert (xml-type? xmap :xsd/documentation))
-  (cc-from-doc xmap))
+
+;;;    tags (reduce (fn [res d] (into res (map :xml/tag (:xml/content d)))) [] docs)
+;;;          bie-doc? (some bie-type tags)]
+;;;      (reset! diag docs))))
+;;;  (let [docs (filter #(or (xml-type? xmap :xsd/annotation)
+;;;                          (xml-type? xmap :xsd/documentation)))
+  #_{:sp/componentDoc
+   (if (-> xmap :xml/content first (xml-type? bie-type))
+     (-> (->> xmap :xml/content (mapv rewrite-xsd))
+         (assoc :sp/function {:fn/type :cct/bie}))
+     (-> (rename-doc-keys xmap)
+         (assoc :sp/function {:fn/type :cct/component})))}
 
 ;;; This is for processing the :xsd/documentation under the simpleContent (supplemental component)
 ;;; under complexContent the :xsd/documentation has the main component.
@@ -201,16 +222,17 @@
         name  (-> attr :xml/attrs :name)
         type  (-> attr :xml/attrs :type)
         use   (-> attr :xml/attrs :use)
-        doc   (xpath- attr :xsd/annotation :xsd/documentation)]
+        doc?  (rewrite-xsd xmap :any/doc)]
     (cond-> {}
       true (assoc :sp/function {:fn/type :cct/supplementary-component})
       name (assoc :cct/scId   name)
       type (assoc :cct/scType type)
       use  (assoc :cct/scUse  use)
-      doc  (assoc :cct/supplementary (cc-from-doc doc)))))
+      doc? (assoc :cct/supplementary doc?))))
 
 ;;; (def ubl-udt-file "/Users/pdenno/Documents/specs/OASIS/UBL-2.3/xsdrt/common/UBL-UnqualifiedDataTypes-2.3.xsd")
 ;;; (-> ubl-udt-file read-clean rewrite-xsd)
+;;; (6) This should return something. (:model/spec)
 (defn uq-dt-common
   "Process common parts of CEFACT and OASIS unqualified datatypes.
    These (see UBL-UnqualifiedDataTypes-2.3.xsd are the things with useful
@@ -226,7 +248,7 @@
       true  (assoc :sp/type (-> cplx-type :xml/attrs :name)),
       true  (assoc :sp/function {:fn/type :sequence}),
       doc?  (assoc :sp/function {:fn/type :cct/component}),
-      doc?  (assoc :sp/component     (rewrite-xsd doc? :cct/component))
+      doc?  (assoc :sp/component     (rewrite-xsd doc? :cct/component-doc))
       sup?  (assoc :sp/supplementary (rewrite-xsd sup? :cct/supplementary))
       elems (assoc :model/sequence (mapv rewrite-xsd elems)))))
 
@@ -251,6 +273,7 @@
       (= (:use attr) "optional") (assoc :sp/minOccurs :0)
       (= (:use attr) "optional") (assoc :sp/maxOccurs :1))))
 
+;;; (5) like 6, why not :model/typeDef. :temp/sequence won't cut it here.
 (defparse :xsd/inline-typedef ; OAGIS only AFAIK
   [cplx-type]
   (assert (xml-type? cplx-type :xsd/complexType))
@@ -270,7 +293,7 @@
       ext?    (assoc :sp/function {:fn/type :extension   :fn/base (-> ext? :xml/attrs :base)}),
       res?    (assoc :sp/function {:fn/type :restriction :fn/base (-> res? :xml/attrs :base)}),
       attrs   (assoc :schema/type-attrs (mapv #(rewrite-xsd % :xsd/type-attr) attrs)),
-      elems   (assoc :model/sequence    (mapv #(rewrite-xsd % :xsd/element) elems)))))
+      elems   (assoc :temp/sequence    (mapv #(rewrite-xsd % :xsd/element) elems)))))
 
 (defparse :oagis/cct-def
   ;; Argument is a vector of :ROOT/ccts_whatever properties.
@@ -312,209 +335,16 @@
                                               (:xml/content (xpath xmap :xsd/restriction)))))
       (dissoc :xsd/restriction)))
 
-
-
-
-;;; ================================ Expand: resolve to atomic schema parts  ===========================
-;;; In the process, keep track of the sp's :sp*/children, a property that is not in the DB owing to
-;;; how much repetitive content that would produce for most schema and profiles.
-;;; The idea of the expand methods is to serve client queries *indirectly* from DB content.
-(defn inlined-typedef-ref
-  "Return the object defining the argument type-term in the argument schema
-  using inlined schema."
-  [type-term schema-urn]
-  (when-let [ent (d/q `[:find ?ent . :where
-                          [?s :schema/name ~schema-urn]
-                          [?s :schema/inlinedTypedefs ?ent]
-                          [?ent :sp/type ~type-term]]
-                      @(connect-atm))]
-    (-> (du/resolve-db-id {:db/id ent} (connect-atm))
-        (assoc :mm/access-method :inlined-typedef))))
-
-(defn imported-typedef-ref
-  "Return the object defining the argument type-term in the argument schema
-   using imported schema."
-  [type-term schema-urn]
-  (let [[prefix term] (clojure.string/split type-term #":")]
-    (when (and term prefix) ; Without the prefix things go awry!
-      (let [[{:mm/keys [ent lib]}]
-                (d/q `[:find ?ref2 ?s2-name
-                       :keys mm/ent mm/lib
-                       :where
-                       [?s1    :schema/name ~schema-urn]
-                       [?s1    :schema/importedSchemas ?i]
-                       [?i     :import/prefix ~prefix]
-                       [?i     :import/referencedSchema ?s2-name]
-                       [?s2    :schema/name ?s2-name]
-                       [?s2    :schema/content ?ref1] ; many :db/id
-                       [?ref1  :sp/name ~term]
-                       [?ref1  :sp/function ?fn]
-                       [?fn    :fn/type :type-ref]
-                       [?ref1  :sp/type ?type]
-                       [?s2    :schema/content ?ref2]
-                       [?ref2  :sp/name ?type]]
-                     @(connect-atm))]
-        (when (and ent lib)
-          (-> (du/resolve-db-id {:db/id ent} (connect-atm))
-              (assoc :mm/lib-where-found lib)
-              (assoc :mm/access-method :imported-typedef)))))))
-
-(defn model-sequence-type-ref
-  [type-term schema-urn]
-  (when-let [ent (d/q `[:find ?m . :where
-                        [?s  :schema/name ~schema-urn]
-                        [?s  :model/sequence ?m]
-                        [?m  :sp/type ~type-term]]
-                      @(connect-atm))]
-    (-> (du/resolve-db-id {:db/id ent} (connect-atm))
-        (assoc :mm/access-method :model-sequence-type))))
-
-#_(defn model-sequence-name-ref
-  "Return the object that has term somewhere in its :model/sequence."
-  [term schema-urn]
-  (when-let [ent (d/q `[:find ?m . :where
-                        [?s  :schema/name ~schema-urn]
-                        [?s  :model/sequence ?m]
-                        [?m  :sp/name ~term]]
-                      @(connect-atm))]
-    (let [found (du/resolve-db-id {:db/id ent} (connect-atm))]
-      (-> {}
-          (assoc :mm/access-method :model-sequence-name)
-          (assoc :model/sequence (:model/sequence found))))))
-
-(defn schema-ref
-  "The term is found in the :model/sequence of a schema; return the schema."
-  [term schema-urn]
-  (when-let [ent (d/q `[:find ?s . :where
-                        [?s  :schema/name ~schema-urn]
-                        [?s  :schema/type :ccts/message-schema]
-                        [?s  :model/sequence ?m]
-                        [?m  :sp/name ~term]
-                        [?m  :sp/type ?type]]
-                      @(connect-atm))]
-    (let [found (du/resolve-db-id {:db/id ent} (connect-atm))]
-      (-> {} ; I'm not keeping much of the schema!
-          (assoc :db/id          ent)
-          (assoc :schema/type    :ccts/message-schema)
-          (assoc :model/sequence (:model/sequence found))
-          (assoc :mm/access-method :schema-ref)))))
-
-(defn included-typedef-ref ; This is just for OAGIS, AFAIK.
-  "Return the object defining the argument type-term in the argument schema
-   using included schema."
-  [type-term schema-urn]
-  (when-let [ent (d/q `[:find ?s2 #_?cont . :where
-                        [?s1 :schema/name ~schema-urn]
-                        [?s1 :schema/includedSchemas ?i]
-                        [?s2 :schema/name ?i]
-                        [?s2 :sp/name ~type-term]
-                        #_[?cont  :term/type ~type-term]]
-                      @(connect-atm))]
-    (-> (du/resolve-db-id {:db/id ent} (connect-atm))
-        (assoc :mm/access-method :included-typedef))))
-
-;;;(library-lookup-ref "UBLExtension" "urn:oasis:names:specification:ubl:schema:xsd:CommonExtensionComponents-2")
-(defn library-lookup-ref
-  "Find the term as :schema/content"
-  [term schema-urn]
-  (when-let [ent (d/q `[:find ?c . :where
-                        [?s :schema/name ~schema-urn]
-                        [?s :schema/content ?c]
-                        [?c :sp/name ~term]]
-                      @(connect-atm))]
-    (-> (du/resolve-db-id {:db/id ent} (connect-atm))
-        (assoc :mm/access-method :library-lookup))))
-
-;;; (term-ref ubl-invoice "InvoiceType")    ; get from inlined.
-;;; (term-ref ubl-invoice "cbc:IssueDate")  ; get from imported.
-;;; (term-ref ubl-invoice "cac:InvoiceLine") ; get from imported.
-;;; (term-ref oagis-invoice "InvoiceLine") ; get from included
-(defn term-ref
-  "Return the object referenced by the term in schema."
-  [term schema-urn]
-  (or (library-lookup-ref      term schema-urn)
-      (inlined-typedef-ref     term schema-urn)
-      (imported-typedef-ref    term schema-urn)
-      (included-typedef-ref    term schema-urn)
-      (model-sequence-type-ref term schema-urn)
-      (schema-ref              term schema-urn)
-      #_(model-sequence-name-ref term schema-urn)
-      (throw (ex-info (str "In term-ref could not resolve " term " " schema-urn)
-                      {:term term :schema-urn schema-urn}))))
-
-;;; ToDo: Remember that once you run this, it is in the schema from then on.
-;;; (get-schema "small-invoice-schema-1")
-(defn store-test [] (->> "small-invoice-schema-1.edn" slurp read-string vector (d/transact (connect-atm))))
-;;; (expand "Invoice" "small-invoice-schema-1")
-
-(defn expand-type
-  [found]
-  (cond (= (:mm/access-method found) :library-lookup) :type-def
-        (s/valid? ::ccts-based-message-schema found)  :ccts/message-schema
-        (s/valid? ::tagged found)          :tagged
-        (s/valid? ::type-ref found)        :type-ref
-        (s/valid? ::model-seq found)       :model-seq
-        :else nil))
-
-(defn expand [term schema]
-  (letfn [(expand-aux [obj term schema]
-            (let [res  (term-ref term schema)
-                  type (expand-type res)]
-              (println "\n\n term = " term  "\n res =" res "\n type =" type)
-              (case type
-                :type-def res
-                :tagged   (-> res
-                              (assoc :expand/method ::tagged)
-                              (assoc :sp/type (:sp/name res))
-                              (assoc :sp/name term)
-                              #_(dissoc :mm/access-method))
-               :type-ref  (-> (expand-aux obj (:sp/type res) schema)
-                               (assoc :expand/method ::type-ref)
-                               (assoc :sp/name (:sp/name res)))
-               :ccts/message-schema (-> obj
-                                    (assoc :expand/method :ccts/message-schema)
-                                    (assoc :sp/name term)
-                                    (assoc :sp/children (mapv #(expand-aux {} (:sp/type %) schema)
-                                                              (:model/sequence res))))
-               :model-seq (-> obj
-                               (assoc :expand/method ::model-seq)
-                               (assoc :sp/name term)
-                               (assoc :sp/children (mapv #(expand-aux {} (:sp/name %) schema)
-                                                         (:model/sequence res))))
-               nil (log/warn "Cannot expand term" term "for schema" schema))))]
-    (expand-aux {} term schema)))
-
-(defn sp-defaults
-  [sp]
-  (cond-> sp
-    (not (:sp/minOccurs sp)) (assoc :sp/minOccurs 1)
-    (not (:sp/maxOccurs sp)) (assoc :sp/maxOccurs 1)
-    (not (:sp/type       sp)) (assoc :sp/type :mm/undefined)))
-
-;;;=========================================================================================================
-(defn get-term-type
-  "Return a map describing what is known about the argument data type.
-    - Schema-urn is a string
-    - term is a string naming a schema object such as a data type (e.g. 'AmountType')"
-  [schema-urn term]
-  (when-let [ent (or (d/q `[:find ?content .
-                            :where
-                            [?schema  :schema/name ~schema-urn]
-                            [?schema  :schema/content ?content]
-                            [?content :term/type ~term]
-                            [?content :sp/function ?fn]
-                            [?fn      :fn/componentType :ABIE]]
-                          @(connect-atm)) ; ToDo: Datahike OR an NOT queries not implemented??? Use predicate?
-                     (d/q `[:find ?content .
-                            :where
-                            [?schema  :schema/name ~schema-urn]
-                            [?schema  :schema/content ?content]
-                            [?content :term/type ~term]
-                            [?content :sp/function ?fn]
-                            [?fn      :fn/componentType :BBIE]]
-                          @(connect-atm)))]
-    (du/resolve-db-id (dp/pull @(connect-atm) '[*] ent) (connect-atm))))
-
+(defparse :cct-doc
+  [xmap]
+  (let [db-ident (-> (:xml/tag ?x) cct-tag2db-ident-map)
+        use-number? (#{:db.type/float :db.type/number, :db.type/double} (-> db-schema+ db-ident :db/valueType))
+        has-source?  (-> db-schema+ db-ident :mm/info :def?)]
+    (if (= db-ident :cct/BusinessContext
+           {db-ident (->> xmap :xml/content (mapv rewrite-xsd))})
+      (cond-> {db-ident (:xml/content xmap)}
+        use-number? (update db-ident read-string)
+        has-source? (assoc :doc/docString (-> xmap :xml/attrs :source))))))
 
 (def non-standard-oagis-schema-topics
   (let [pat {"urn:oagis-~A:CodeList_ConstraintTypeCode_1.xsd"            "Codelist, ConstraintTypes",

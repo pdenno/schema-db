@@ -96,7 +96,7 @@
                     :else form))]
       (cf-aux form))))
 
-;;; POD ToDo: Spec about this?
+;;; ToDo: Spec about this?
 (defn storable?
   "Return true if the argument contains no nils.
    Such data cannot be stored in datahike."
@@ -144,12 +144,12 @@
                (some #(when (= search (:xml/tag %)) %) (:xml/content result)))
              (rest path))))))
 
-;;; POD Could enhance this to be REAL XPath.
+;;; ToDo: Could enhance this to be REAL XPath.
 (defn xpath
-  "Content is a map with :xml/content. Follow the path, each step of
+  "Argument 'content' is a map with :xml/content. Follow the path, each step of
    which selects something from argument's :xml/content
    either an :xml/tag element, in which the first such is chosen, or an index,
-   in which case that one is "
+   in which case that one is chosen."
   [content & path-in]
   (xpath-internal content {:warn? true} path-in))
 
@@ -158,11 +158,12 @@
   [content & path-in]
   (xpath-internal content {} path-in))
 
-;;; POD More sophisticated usage???
 (defn xml-type?
   "Return true if the content has :xml/tag = the argument."
   [xml xtype]
-  (= (:xml/tag xml) xtype))
+  (if (map? xtype)
+    (contains? xtype (:xml/tag xml))
+    (= (:xml/tag xml) xtype)))
 
 (defn child-types
   "Return a map that has an entry collecting the instances of every child type found.
@@ -179,7 +180,7 @@
   (walk/postwalk
    (fn [obj]
      (if (and (map? obj) (contains? obj :content))
-       (if (= 1 (count (:content obj))) ;; POD Maybe don't remove it if is the only content???
+       (if (= 1 (count (:content obj))) ;; ToDo: Maybe don't remove it if is the only content???
          obj
          (update obj :content (fn [ct] (remove #(and (string? %) (re-matches #"^\s*$" %)) ct))))
        obj))
@@ -190,7 +191,7 @@
    If the schema uses 'xs' for 'http://www.w3.org/2001/XMLSchema', change it to xsd"
   [nspaces & {:keys [root-name] :or {root-name "ROOT"}}]
   (when (-> nspaces :p->u (contains? root-name))
-    (log/warn "XML uses explicit 'root' namespace alias.")) ; POD so pick something else. NYI.
+    (log/warn "XML uses explicit 'root' namespace alias.")) ; ToDo: So pick something else.
   (as-> nspaces ?ns
     (assoc-in ?ns [:p->u root-name] (or (get (:p->u ?ns) "") :mm/nil))
     (update ?ns :p->u #(dissoc % ""))
@@ -209,7 +210,7 @@
         (assoc-in ?ns1 [:u->ps "http://www.w3.org/2001/XMLSchema"] ["xsd"]))
       ?ns)))
 
-;;; POD Currently this isn't looking for redefined aliases. It calls x/element-nss just once!
+;;; ToDo: Currently this isn't looking for redefined aliases. It calls x/element-nss just once!
 ;;; (-> sample-ubl-message io/reader x/parse alienate-xml)
 (defn alienate-xml ; Silly, but I like it!
   "Replace namespaced xml map keywords with their aliases."

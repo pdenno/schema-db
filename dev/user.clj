@@ -17,7 +17,9 @@
   "Start the server"
   []
   (mount/start)
-  (log/info "Starting schema-db: db connection = " @(du/connect-atm)))
+  (if (du/connect-atm)
+    (log/info "Starting schema-db: db connection = " @(du/connect-atm))
+    (log/error "connection atom is nil.")))
 
 (defn go [] (start))
 

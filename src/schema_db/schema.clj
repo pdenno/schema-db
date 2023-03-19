@@ -2,109 +2,216 @@
   (:require
    [clojure.spec.alpha :as s]))
 
+(def db-schema+
+  "Defines information for the datahike schema plus additional information about the property in :mm/info"
+  {:cct/ACCDefinition
+   #:db{:cardinality :db.cardinality/one, :valueType :db.type/string, :mm/info {:fn :ACC, :def? true, :score? true}},
+   :cct/ACCRevisionNumber
+   #:db{:cardinality :db.cardinality/one, :valueType :db.type/long, :mm/info {:fn :ACC, :score? true}},
+   :cct/ACC_GUID
+   #:db{:cardinality :db.cardinality/one, :valueType :db.type/string, :unique :db.unique/identity, :mm/info {:fn :ACC, :score? true}},
+   :cct/ASCCDefinition
+   #:db{:cardinality :db.cardinality/one, :valueType :db.type/string, :mm/info {:fn :ASCC, :def? true, :score? true}},
+   :cct/ASCCRevisionNumber
+   #:db{:cardinality :db.cardinality/one, :valueType :db.type/long, :mm/info {:fn :ASCC, :score? true}},
+   :cct/ASCC_GUID
+   #:db{:cardinality :db.cardinality/one, :valueType :db.type/string, :unique :db.unique/identity, :mm/info {:fn :ASCC, :score? true}},
+   :cct/BCCDefinition
+   #:db{:cardinality :db.cardinality/one, :valueType :db.type/string, :mm/info {:fn :BCC, :def? true, :score? true}},
+   :cct/BCCRevisionNumber
+   #:db{:cardinality :db.cardinality/one, :valueType :db.type/long, :mm/info {:fn :BCC, :score? true}},
+   :cct/BCC_GUID
+   #:db{:cardinality :db.cardinality/one, :valueType :db.type/string, :unique :db.unique/identity, :mm/info {:fn :BCC, :score? true}},
+   :cct/BusinessContext
+   #:db{:cardinality :db.cardinality/many, :valueType :db.type/ref, :mm/info {:fn :BusinessContext, :score? true}},
+   :cct/Cardinality
+   #:db{:cardinality :db.cardinality/one, :valueType :db.type/string},
+   :cct/CategoryCode
+   #:db{:cardinality :db.cardinality/one, :valueType :db.type/keyword},
+   :cct/DataTypeTermName
+   #:db{:cardinality :db.cardinality/one, :valueType :db.type/string},
+   :cct/Definition
+   #:db{:cardinality :db.cardinality/one, :valueType :db.type/string},
+   :cct/Description
+   #:db{:cardinality :db.cardinality/one, :valueType :db.type/string},
+   :cct/DictionaryEntryName
+   #:db{:cardinality :db.cardinality/one, :valueType :db.type/string},
+   :cct/GUID #:db{:cardinality :db.cardinality/one, :valueType :db.type/string, :unique :db.unique/identity}
+   :cct/Name
+   #:db{:cardinality :db.cardinality/one, :valueType :db.type/string, :doc "Used in :cct/cctsBusinessContext, at least"},
+   :cct/ObjectClass
+   #:db{:cardinality :db.cardinality/one, :valueType :db.type/string},
+   :cct/PrimitiveType
+   #:db{:cardinality :db.cardinality/one, :valueType :db.type/keyword},
+   :cct/PropertyTermName
+   #:db{:cardinality :db.cardinality/one, :valueType :db.type/string},
+   :cct/QualifierTerm
+   #:db{:cardinality :db.cardinality/one, :valueType :db.type/string},
+   :cct/RepresentationTermName
+   #:db{:cardinality :db.cardinality/one, :valueType :db.type/string},
+   :cct/UniqueID
+   #:db{:cardinality :db.cardinality/one, :valueType :db.type/string},
+   :cct/UsageRule
+   #:db{:cardinality :db.cardinality/one, :valueType :db.type/string},
+   :cct/VersionID
+   #:db{:cardinality :db.cardinality/one, :valueType :db.type/string},
+   :cct/scId
+   #:db{:cardinality :db.cardinality/one, :valueType :db.type/string, :doc "'sc' is supplementary to component"},
+   :cct/scType
+   #:db{:cardinality :db.cardinality/one, :valueType :db.type/keyword},
+   :cct/scUse
+   #:db{:cardinality :db.cardinality/one, :valueType :db.type/keyword},
+   :cct/supplementary
+   #:db{:cardinality :db.cardinality/many, :valueType :db.type/ref},
+   ;; ------------------ codeList
+   :codeList/lists
+   #:db{:cardinality :db.cardinality/many, :valueType :db.type/ref},
+   :codeList/name
+   #:db{:cardinality :db.cardinality/one, :valueType :db.type/string},
+   :codeList/terms
+   #:db{:cardinality :db.cardinality/many, :valueType :db.type/ref},
+   ;; ------------------ doc
+   :doc/docString #:db{:cardinality :db.cardinality/one, :valueType :db.type/string},
+   ;; ----------------- fn
+   :fn/base
+   #:db{:cardinality :db.cardinality/one, :valueType :db.type/string},
+   :fn/componentType
+   #:db{:cardinality :db.cardinality/one, :valueType :db.type/keyword},
+   :fn/type
+   #:db{:cardinality :db.cardinality/one, :valueType :db.type/keyword},
+   ;; ----------------- import
+   :import/prefix
+   #:db{:cardinality :db.cardinality/one, :valueType :db.type/string},
+   :import/referencedSchema
+   #:db{:cardinality :db.cardinality/one, :valueType :db.type/string},
+   ;; ----------------- iso
+   :iso/CodeName #:db{:cardinality :db.cardinality/one, :valueType :db.type/string, :doc "Used in OAGIS/ISO currency codes"},
+   ;; ----------------- mm (used for metamodeling, note keeping in processing)
+   :mm/comment
+   #:db{:cardinality :db.cardinality/one, :valueType :db.type/string, :doc "All the mm things are for debugging."},
+   :mm/debug
+   #:db{:cardinality :db.cardinality/one, :valueType :db.type/string},
+   :mm/fileNotRead?
+   #:db{:cardinality :db.cardinality/one, :valueType :db.type/boolean},
+   :mm/tempInclude
+   #:db{:cardinality :db.cardinality/many, :valueType :db.type/string},
+   :mm/unhandledXML
+   #:db{:cardinality :db.cardinality/one, :valueType :db.type/string},
+   ;; ------------------ model (general modeling concepts)
+   :model/complexType
+   #:db{:cardinality :db.cardinality/many, :valueType :db.type/ref},
+   :model/enumeration
+   #:db{:cardinality :db.cardinality/many, :valueType :db.type/string},
+   :model/namedElement
+   #:db{:cardinality :db.cardinality/many, :valueType :db.type/ref, :doc "Something names, such as xsd:element with :ref or :name."},
+   :model/sequence
+   #:db{:cardinality :db.cardinality/many, :valueType :db.type/ref, :doc "generic modeling concept"},
+   ;; ------------------ schema (message schema level concepts)
+   :schema/content
+   #:db{:cardinality :db.cardinality/many, :valueType :db.type/ref, :doc "typically this includes the entire content of an xsd file."},
+   :schema/importedSchemas
+   #:db{:cardinality :db.cardinality/many, :valueType :db.type/ref},
+   :schema/includedSchemas
+   #:db{:cardinality :db.cardinality/many, :valueType :db.type/string},
+   :schema/inlinedTypedefs
+   #:db{:cardinality :db.cardinality/many, :valueType :db.type/ref},
+   :schema/name
+   #:db{:cardinality :db.cardinality/one, :valueType :db.type/string, :unique :db.unique/identity},
+   :schema/pathname
+   #:db{:cardinality :db.cardinality/one, :valueType :db.type/string},
+   :schema/sdo
+   #:db{:cardinality :db.cardinality/one, :valueType :db.type/keyword},
+   :schema/shortName
+   #:db{:cardinality :db.cardinality/one, :valueType :db.type/string},
+   :schema/simpleTypes
+   #:db{:cardinality :db.cardinality/many, :valueType :db.type/ref},
+   :schema/spec
+   #:db{:cardinality :db.cardinality/one, :valueType :db.type/keyword},
+   :schema/subversion
+   #:db{:cardinality :db.cardinality/one, :valueType :db.type/string, :doc "e.g. for OAGIS 10.8 it is '8'"},
+   :schema/topic
+   #:db{:cardinality :db.cardinality/one, :valueType :db.type/string},
+   :schema/type
+   #:db{:cardinality :db.cardinality/one, :valueType :db.type/keyword},
+   :schema/version
+   #:db{:cardinality :db.cardinality/one, :valueType :db.type/string, :doc "e.g. for OAGIS 10.8 it is '10'"},
+   ;; -------------------- sp (schema property)
+   :sp/abstract
+   #:db{:cardinality :db.cardinality/one, :valueType :db.type/boolean},
+   :sp/componentDoc
+   #:db{:cardinality :db.cardinality/many, :valueType :db.type/ref,
+        :doc "This is typically structured content referencing CCT concepts (e.g. BContext, Component def, etc\n
+              ToDo: It might be reasonable to merge the value of this into the parent and eliminate the property. "},
+   :sp/docString
+   #:db{:cardinality :db.cardinality/many, :valueType :db.type/string,
+      :doc "when :xsd/documentation is a string, rather than :sp/supplementary\n ToDo: Should I just use :doc/docString ?"},
+   :sp/function
+   #:db{:cardinality :db.cardinality/one, :valueType :db.type/ref, :doc ":fn objects."},
+   :sp/maxOccurs
+   #:db{:cardinality :db.cardinality/one, :valueType :db.type/keyword},
+   :sp/minOccurs
+   #:db{:cardinality :db.cardinality/one, :valueType :db.type/keyword},
+   :sp/name
+   #:db{:cardinality :db.cardinality/one, :valueType :db.type/string},
+   :sp/ref
+   #:db{:cardinality :db.cardinality/one, :valueType :db.type/string, :doc "e.g. xsd:element attr."},
+   :sp/supplementary
+   #:db{:cardinality :db.cardinality/one, :valueType :db.type/ref, :doc "CCT"},
+   :sp/type
+   #:db{:cardinality :db.cardinality/one, :valueType :db.type/string},
+   :sp/typeDef
+   #:db{:cardinality :db.cardinality/many, :valueType :db.type/ref, :doc "xsd:elem with a name, type attrs"},
+   :sp/xsdType
+   #:db{:cardinality :db.cardinality/one, :valueType :db.type/keyword},
+   :term/name
+   #:db{:cardinality :db.cardinality/one, :valueType :db.type/string, :doc "An ID unique within the schema"},
+   :xml/rootNamespace
+   #:db{:cardinality :db.cardinality/one, :valueType :db.type/string, :doc "The URI of the un-prefixed namespace, if any"},
+   ;; --------------- xsd (XML Schema concepts)
+   :xsd/attributeGroup
+   #:db{:cardinality :db.cardinality/many, :valueType :db.type/ref},
+   :xsd/choice
+   #:db{:cardinality :db.cardinality/many, :valueType :db.type/ref},
+   :xsd/fractionDigits
+   #:db{:cardinality :db.cardinality/one, :valueType :db.type/long},
+   :xsd/length
+   #:db{:cardinality :db.cardinality/one, :valueType :db.type/long},
+   :xsd/listItemType
+   #:db{:cardinality :db.cardinality/one, :valueType :db.type/string, :doc "This is the itemType attr of the element."},
+   :xsd/maxExclusive
+   #:db{:cardinality :db.cardinality/one, :valueType :db.type/number},
+   :xsd/maxInclusive
+   #:db{:cardinality :db.cardinality/one, :valueType :db.type/number},
+   :xsd/maxLength
+   #:db{:cardinality :db.cardinality/one, :valueType :db.type/long},
+   :xsd/minExclusive
+   #:db{:cardinality :db.cardinality/one, :valueType :db.type/number},
+   :xsd/minInclusive
+   #:db{:cardinality :db.cardinality/one, :valueType :db.type/number},
+   :xsd/minLength
+   #:db{:cardinality :db.cardinality/one, :valueType :db.type/long},
+   :xsd/pattern
+   #:db{:cardinality :db.cardinality/one, :valueType :db.type/string},
+   :xsd/restriction
+   #:db{:cardinality :db.cardinality/one, :valueType :db.type/ref},
+   :xsd/totalDigits
+   #:db{:cardinality :db.cardinality/one, :valueType :db.type/long},
+   :xsdAttrGroup/data
+   #:db{:cardinality :db.cardinality/many, :valueType :db.type/string},
+   ;; ------------- zip (used for code lists)
+   :zip/keys
+   #:db{:cardinality :db.cardinality/many, :valueType :db.type/string},
+   :zip/vals
+   #:db{:cardinality :db.cardinality/many, :valueType :db.type/ref}})
+
 (def db-schema
-  "Defines the datahike schema for this database.
-     :db/db.cardinality=many means value is a vector of values of some :db.type."
-  [#:db{:cardinality :db.cardinality/one,  :valueType :db.type/string,  :ident :cct/Cardinality}
-   #:db{:cardinality :db.cardinality/one,  :valueType :db.type/keyword, :ident :cct/CategoryCode}
-   #:db{:cardinality :db.cardinality/one,  :valueType :db.type/string,  :ident :cct/DataTypeTermName}
-   #:db{:cardinality :db.cardinality/one,  :valueType :db.type/string,  :ident :cct/Definition}
-   #:db{:cardinality :db.cardinality/one,  :valueType :db.type/string,  :ident :cct/Description}
-   #:db{:cardinality :db.cardinality/one,  :valueType :db.type/string,  :ident :cct/DictionaryEntryName}
-   #:db{:cardinality :db.cardinality/one,  :valueType :db.type/string,  :ident :cct/Name}
-   #:db{:cardinality :db.cardinality/one,  :valueType :db.type/string,  :ident :cct/ObjectClass}
-   #:db{:cardinality :db.cardinality/one,  :valueType :db.type/keyword, :ident :cct/PrimitiveType}
-   #:db{:cardinality :db.cardinality/one,  :valueType :db.type/string,  :ident :cct/PropertyTermName}
-   #:db{:cardinality :db.cardinality/one,  :valueType :db.type/string,  :ident :cct/QualifierTerm}
-   #:db{:cardinality :db.cardinality/one,  :valueType :db.type/string,  :ident :cct/RepresentationTermName}
-   #:db{:cardinality :db.cardinality/one,  :valueType :db.type/string,  :ident :cct/UniqueID}
-   #:db{:cardinality :db.cardinality/one,  :valueType :db.type/string,  :ident :cct/UsageRule}
-   #:db{:cardinality :db.cardinality/one,  :valueType :db.type/string,  :ident :cct/VersionID}
-   #:db{:cardinality :db.cardinality/one,  :valueType :db.type/string,  :ident :cct/scId
-        :doc "'sc' is supplementary to component"}
-   #:db{:cardinality :db.cardinality/one,  :valueType :db.type/keyword, :ident :cct/scType}
-   #:db{:cardinality :db.cardinality/one,  :valueType :db.type/keyword, :ident :cct/scUse}
-   #:db{:cardinality :db.cardinality/many, :valueType :db.type/ref,     :ident :cct/supplementary}
-   #:db{:cardinality :db.cardinality/one,  :valueType :db.type/string,  :ident :codeList/name}
-   #:db{:cardinality :db.cardinality/many, :valueType :db.type/ref,     :ident :codeList/lists}
-   #:db{:cardinality :db.cardinality/many, :valueType :db.type/ref,     :ident :codeList/terms}
-   #:db{:cardinality :db.cardinality/one,  :valueType :db.type/string,  :ident :doc/docString}
-   #:db{:cardinality :db.cardinality/one,  :valueType :db.type/keyword, :ident :fn/componentType}
-   #:db{:cardinality :db.cardinality/one,  :valueType :db.type/keyword, :ident :fn/type}
-   #:db{:cardinality :db.cardinality/one,  :valueType :db.type/string,  :ident :fn/base}
-   #:db{:cardinality :db.cardinality/one,  :valueType :db.type/string,  :ident :import/prefix}
-   #:db{:cardinality :db.cardinality/one,  :valueType :db.type/string,  :ident :import/referencedSchema}
-   #:db{:cardinality :db.cardinality/one,  :valueType :db.type/string,  :ident :iso/CodeName,
-        :doc "Used in OAGIS/ISO currency codes"}
-   #:db{:cardinality :db.cardinality/one,  :valueType :db.type/string,  :ident :mm/comment
-        :doc "All the mm things are for debugging."}
-   #:db{:cardinality :db.cardinality/one,  :valueType :db.type/string,  :ident :mm/debug}
-   #:db{:cardinality :db.cardinality/one,  :valueType :db.type/boolean, :ident :mm/fileNotRead?}
-   #:db{:cardinality :db.cardinality/one,  :valueType :db.type/string,  :ident :mm/unhandledXML}
-   #:db{:cardinality :db.cardinality/many, :valueType :db.type/string,  :ident :mm/tempInclude}
-   #:db{:cardinality :db.cardinality/many, :valueType :db.type/ref,     :ident :model/sequence
-        :doc "generic modeling concept"}
-   #:db{:cardinality :db.cardinality/many, :valueType :db.type/string,  :ident :model/enumeration}
-   #:db{:cardinality :db.cardinality/many, :valueType :db.type/ref,     :ident :schema/complexTypes}
-   #:db{:cardinality :db.cardinality/many, :valueType :db.type/ref,     :ident :schema/content
-        :doc "typically this includes the entire content of an xsd file."}
-   #:db{:cardinality :db.cardinality/many, :valueType :db.type/ref,     :ident :schema/importedSchemas}
-   #:db{:cardinality :db.cardinality/many, :valueType :db.type/string,  :ident :schema/includedSchemas}
-   #:db{:cardinality :db.cardinality/many, :valueType :db.type/ref,     :ident :schema/inlinedTypedefs}
-   #:db{:cardinality :db.cardinality/one,  :valueType :db.type/string,  :ident :schema/name, :unique :db.unique/identity}
-   #:db{:cardinality :db.cardinality/one,  :valueType :db.type/string,  :ident :schema/pathname}
-   #:db{:cardinality :db.cardinality/one,  :valueType :db.type/keyword, :ident :schema/sdo}
-   #:db{:cardinality :db.cardinality/one,  :valueType :db.type/string,  :ident :schema/shortName}
-   #:db{:cardinality :db.cardinality/many, :valueType :db.type/ref,     :ident :schema/simpleTypes}
-   #:db{:cardinality :db.cardinality/one,  :valueType :db.type/keyword, :ident :schema/spec}
-   #:db{:cardinality :db.cardinality/one,  :valueType :db.type/string,  :ident :schema/subversion
-        :doc "e.g. for OAGIS 10.8 it is '8'"}
-   #:db{:cardinality :db.cardinality/one,  :valueType :db.type/string,  :ident :schema/topic}
-   #:db{:cardinality :db.cardinality/one,  :valueType :db.type/keyword, :ident :schema/type}
-   #:db{:cardinality :db.cardinality/one,  :valueType :db.type/string,  :ident :schema/version
-        :doc "e.g. for OAGIS 10.8 it is '10'"}
-   ;; sp is 'schema property', general sort of things.
-   #:db{:cardinality :db.cardinality/one,  :valueType :db.type/boolean, :ident :sp/abstract}
-   #:db{:cardinality :db.cardinality/one,  :valueType :db.type/ref,     :ident :sp/component
-        :doc "CCT see also supplementary"}
-   #:db{:cardinality :db.cardinality/many, :valueType :db.type/string,  :ident :sp/docString
-        :doc "when :xsd/documentation is a string, rather than :sp/supplementary
-              ToDo: Should I just use :doc/docString ?"}
-   #:db{:cardinality :db.cardinality/one,  :valueType :db.type/ref,     :ident :sp/function,
-        :doc ":fn objects."}
-   #:db{:cardinality :db.cardinality/one,  :valueType :db.type/keyword, :ident :sp/maxOccurs}
-   #:db{:cardinality :db.cardinality/one,  :valueType :db.type/keyword, :ident :sp/minOccurs}
-   #:db{:cardinality :db.cardinality/one,  :valueType :db.type/string,  :ident :sp/name}
-   #:db{:cardinality :db.cardinality/one,  :valueType :db.type/string,  :ident :sp/ref
-        :doc "e.g. xsd:element attr."}
-   #:db{:cardinality :db.cardinality/one,  :valueType :db.type/ref,     :ident :sp/supplementary
-        :doc "CCT"}
-   #:db{:cardinality :db.cardinality/one,  :valueType :db.type/string,  :ident :sp/type}
-   #:db{:cardinality :db.cardinality/many, :valueType :db.type/ref,     :ident :sp/typeRef
-        :doc "xsd:elem with a name, type attrs"}
-   #:db{:cardinality :db.cardinality/one,  :valueType :db.type/keyword, :ident :sp/xsdType}
-   #:db{:cardinality :db.cardinality/one,  :valueType :db.type/string,  :ident :term/name,
-        :doc "An ID unique within the schema"}
-   ;; ToDo: These are typically things that could be generalized or need further investigation
-   #:db{:cardinality :db.cardinality/many, :valueType :db.type/ref,     :ident :xsd/attributeGroup}
-   #:db{:cardinality :db.cardinality/many, :valueType :db.type/string,  :ident :xsdAttrGroup/data}
-   #:db{:cardinality :db.cardinality/many, :valueType :db.type/ref,     :ident :xsd/choice}
-   #:db{:cardinality :db.cardinality/one,  :valueType :db.type/long,    :ident :xsd/fractionDigits}
-   #:db{:cardinality :db.cardinality/one,  :valueType :db.type/string,  :ident :xsd/listItemType
-        :doc "This is the itemType attr of the element."}
-   #:db{:cardinality :db.cardinality/one,  :valueType :db.type/long,    :ident :xsd/length}
-   #:db{:cardinality :db.cardinality/one,  :valueType :db.type/long,    :ident :xsd/maxLength}
-   #:db{:cardinality :db.cardinality/one,  :valueType :db.type/number,  :ident :xsd/minExclusive}
-   #:db{:cardinality :db.cardinality/one,  :valueType :db.type/number,  :ident :xsd/maxExclusive}
-   #:db{:cardinality :db.cardinality/one,  :valueType :db.type/number,  :ident :xsd/minInclusive}
-   #:db{:cardinality :db.cardinality/one,  :valueType :db.type/number,  :ident :xsd/maxInclusive}
-   #:db{:cardinality :db.cardinality/one,  :valueType :db.type/long,    :ident :xsd/minLength}
-   #:db{:cardinality :db.cardinality/one,  :valueType :db.type/string,  :ident :xsd/pattern}
-   #:db{:cardinality :db.cardinality/one,  :valueType :db.type/ref,     :ident :xsd/restriction} ; ToDo: eliminate this.
-   #:db{:cardinality :db.cardinality/one,  :valueType :db.type/long,    :ident :xsd/totalDigits}
-   ;; These are for boxing values.
-   #:db{:cardinality :db.cardinality/many, :valueType :db.type/string,  :ident :zip/keys}
-   #:db{:cardinality :db.cardinality/many, :valueType :db.type/ref,     :ident :zip/vals}])
+  "Create a Datahike-compatible schema from the above."
+  (reduce-kv (fn [r k v]
+               (conj r (-> v
+                           (dissoc :mm/info)
+                           (assoc :db/ident k))))
+             {}
+             db-schema+))
 
 (def simple-xsd?
   {:xsd/length         :number
