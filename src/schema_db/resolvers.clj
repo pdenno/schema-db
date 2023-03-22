@@ -60,7 +60,7 @@
 (pco/defresolver sdb-schema-id->props [env {:sdb/keys [schema-id]}]
   {::pco/input  [:sdb/schema-id]
    ::pco/output [:schema/name :sdb/schema-id :schema/sdo :schema/type :schema/topic
-                :schema/subversion :schema/inlinedTypedefs :schema/spec
+                :schema/subversion :model/inlinedTypedef :schema/spec
                 {:schema/importedSchemas [:sdb/imported-schema-id]}
                 {:model/sequence [:sdb/elem-id]}]}
   (-> (dp/pull @(connect-atm) '[*] schema-id) ; ToDo: could also do the :keys thing on the pull.
@@ -107,7 +107,7 @@
   [elem-id]
   (if-let [owning-schema (d/q `[:find ?s :where [?s :model/sequence ~elem-id]] @(connect-atm))]
     (let [ref-1 (d/q `[:find [?rs ...] :where [~owning-schema :schema/importedSchemas ?rs]] @(connect-atm))
-          ref-2 (d/q `[:find [?rs ...] :where [~owning-schema :schema/inlinedTypedefs  ?rs]] @(connect-atm))
+          ref-2 (d/q `[:find [?rs ...] :where [~owning-schema :model/inlinedTypedef  ?rs]] @(connect-atm))
           _refs (into ref-1 ref-2)
           _elem-info (dp/pull @(connect-atm) '[*] elem-id)]
       (if-let [_ref-schema nil #_(schema-containing-ref)]

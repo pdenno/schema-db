@@ -2,12 +2,20 @@
   "Functions to classify schema, include standard messaging schema."
   (:require
    [clojure.pprint               :refer [cl-format]]
+   [clojure.set                  :refer [intersection]]
    [clojure.string               :as str]
    [datahike.api                 :as d]
    [datahike.pull-api            :as dp]
    [schema-db.db-util :as du     :refer [connect-atm xpath xml-type?]]
-   [schema-db.schema  :as schema :refer [simple-xsd? generic-schema-type? special-schema-type? bie-simple-type?]]
+   [schema-db.schema  :as schema :refer [db-schema+ simple-xsd? generic-schema-type? special-schema-type? cct-tag2db-ident-map]]
    [taoensso.timbre              :as log]))
+
+(def ^:dynamic *skip-doc-processing?*
+  "If true, it won't go through (bug-ridden) obj-doc-string"
+  true)
+
+(def ^:dynamic *prefix* "String naming a namespace for attributes whose name appears in lots of objects (e.g. model, element, complexType, simpleType)"
+  "unassigned")
 
 ;;; This does file-level dispatching as well as the details.
 (defn rewrite-xsd-dispatch
@@ -29,25 +37,25 @@
                (generic-schema-type? stype) stype,
 
                ;; Special simplifications
-               (and (map? obj) (contains? simple-xsd?       (:xml/tag obj)))  :simple-xsd,
-               (and (map? obj) (contains? bie-simple-type?  (:xml/tag obj)))  :simple-bie,
-               (and (map? obj) (contains? obj :xml/tag))                      (:xml/tag obj),
-               (and (map? obj) (contains? obj :ref))                          :ref
+               (and (map? obj) (contains? simple-xsd?           (:xml/tag obj)))  :simple-xsd,
+               (and (map? obj) (contains? cct-tag2db-ident-map  (:xml/tag obj)))  :generic/simple-cct,
+               (and (map? obj) (contains? obj :xml/tag))                          (:xml/tag obj),
+               (and (map? obj) (contains? obj :ref))                              :ref
                ; ToDo: this one for polymorphism #{:xsd/element :xsd/choice} etc.
                (contains? obj :xml/tag)                                       (:xml/tag obj))]
      meth))
 
-(def ^:dynamic *skip-doc-processing?* false)
-
+;;; This is bug-ridden and should be avoided!
 (defn obj-doc-string
   "If the object has annotations in its :xml/content, remove them and return
    modified object and the string content. Otherwise, just return object and nil.
    The xsd:appinfo optional content is ignored."
   [obj]
+  (log/warn "Using obj-doc-string.")
   (if (or *skip-doc-processing?*
-          (-> obj :xml/content string?)
-          #_(not (map? obj)) ; ToDo: This and next are uninvestigated problems in the etsi files.
-          #_(not (contains? obj :xml/content))) ; 2023-03-17 I commented those out and added string? test.
+          #_(-> obj :xml/content string?) ; 2023-03-21 I commented this out and put the other two back!
+          (not (map? obj)) ; ToDo: This and next are uninvestigated problems in the etsi files.
+          (not (contains? obj :xml/content))) ; 2023-03-17 I commented those out and added string? test.
     [obj nil]
     (let [parts (group-by #(xml-type? % :xsd/annotation) (:xml/content obj))
           annotes (get parts true)
@@ -259,9 +267,28 @@
       ;; Default
       :generic/xsd-file)))
 
-;;; ToDo: A schema is getting past this with schema-name "".
+(declare schema-name-special schema-name-std)
 (defn schema-name
   "Return the name of the schema object. This uses the XML content to determine one."
+  [xmap]
+  (let [
+        pname (:schema/pathname xmap)]
+    (if (re-matches #".*sources/misc/.*" pname)
+      (schema-name-special xmap)
+      (schema-name-std xmap))))
+
+(defn schema-name-special
+  [xmap]
+  (let [sdo  (:schema/sdo xmap)
+        ver  (:schema/version xmap)
+        sver (:schema/subversion xmap)
+        pname (:schema/pathname xmap)]
+    (if-let [[_ person dir fname] (re-matches #".*sources/misc/([a-zA-Z0-9\-\_]+)/([a-zA-Z0-9\-\_]+)/([a-zA-Z0-9\-\_]+).xsd" pname)]
+      (cl-format nil "urn:~A-~A.~A:~A.~A.~A" (name sdo) ver sver person dir fname)
+      (do (log/warn "Could not determine special schema name.")
+           "unknown/special"))))
+
+(defn schema-name-std
   [xmap]
   (let [sdo  (:schema/sdo xmap)
         ver  (:schema/version xmap)
@@ -283,7 +310,6 @@
                     (str "urn:oagis-" ver-str ":" res-pname))
                 (do (log/warn "Could not determine OAGIS" ver-str "schema name.")
                     :mm/nil)))))),
-
         (= :qif sdo)
         (if-let [[_ fname] (re-matches #".*/QIFLibrary/(\w+).xsd" pname)]
           (str "urn:QIF-" ver-str ":Library:" fname)
@@ -308,34 +334,71 @@
     (letfn [(b? [obj]
               (cond @bie? true
                     (map? obj)    (doseq [[k v] (seq obj)]
-                                    (when (= k :bie/ccts_BusinessContext)
+                                    (when (= k :cct/BusinessContext)
                                       (reset! bie? true))
                                     (b? v))
                     (vector? obj) (doall (map b? obj))))]
       (b? schema)
-      (log/info "Final :schema/type changed?: " @bie?)
+      ;(log/info "Final :schema/type changed?: " @bie?)
       (cond-> schema
-        @bie? (assoc :schema/type :ccts/bie)))))
+        @bie? (assoc :schema/type :cct/bie)))))
+
+;;; Where this is used I'm typically trying to finesse the output into somethign less
+;;; clunky than the shape of XSD/XML. ToDo: Still experimental!
+(defn merge-warn
+  "Merge the argument maps but warn where any of them have the same keys (collisions),
+   unless the keys are are on the ok-set. Values of collision keys are aggregated."
+  [maps & {:keys [ok-set] :or {ok-set #{:has/docString :has/documentation}}}]
+  (if (== 1 (count maps))
+    maps
+    (let [collisions (->> maps (map keys) (map set) (apply intersection))
+          save-data (reduce (fn [res k]
+                              (assoc res k (reduce (fn [gather m]
+                                                     (if (contains? m k)
+                                                       (let [more (get m k)]
+                                                         (if (vector? more)
+                                                           (into gather more)
+                                                           (conj gather more)))
+                                                       gather))
+                                                   []
+                                                   maps)))
+                            {}
+                            collisions)]
+      (when (-> collisions set (clojure.set/difference ok-set) not-empty)
+        (log/warn "Maps have same keys: " collisions "\n save-data =" save-data))
+      (reduce-kv (fn [m k v] (assoc m k v))
+                 (apply merge maps)
+                 save-data))))
+
+(defn xsd-value-type
+  "Arguments are a db-ident and value.
+   Returns the value coerced to that type."
+  [k v]
+  (if-let [typ (-> db-schema+ k :db/valueType)]
+    (try
+      (if (#{:db.type/long :db.type/float :db.type/number, :db.type/double :db.type/boolean} typ)
+        (let [val (read-string v)]
+          (if (= val 'unbounded) -1 val))
+        v)
+      (catch Exception _e (log/warn "Could not read xsd attribute declared a number: k = " k " v = " v)))
+      (log/warn "Unknown attribute type: " k)))
+
+(defn xsd-attr-map
+  "Return a map of attributes where
+    (1) the keys of a few special ones are in the argument namespace (a string) and the rest are in 'xsd', and_
+    (2) the values are converted to the right type, based on the database schema."
+  [attr-map nspace]
+  (reduce-kv
+   (fn [m k v]
+     (let [kk (if (#{:ref :name :id} k)
+                (keyword nspace (name k))
+                (keyword "xsd" (name k)))]
+       (assoc m kk (xsd-value-type kk v))))
+   {}
+   attr-map))
+
 
 (def diag (atom nil))
-
-(defn squash-temp-sequences
-  "For convenience, parsing XML can add some things as :temp/sequence where the elements should all be maps.
-   This replaces the :temp/sequence map with its value."
-  [obj]
-  (letfn [(sts [obj]
-            (cond (map? obj)     (reduce-kv (fn [m k v] ; Of course this won't catch a top-level :temp/sequence.
-                                              (if (and (map? v) (contains? v :temp/sequence)) ; ToDo: This is a 'devl' test.
-                                                (do (when-not (every? map? (:temp/sequence v))
-                                                      (reset! diag v)
-                                                      (throw (ex-info ":temp/sequence w/o map values:" {:k k :v v})))
-                                                    (assoc m k (->> v :temp/sequence (mapv sts))))
-                                                (assoc m k (sts v))))
-                                            {}
-                                            obj),
-                  (vector? obj) (mapv sts obj)
-                  :else         obj))]
-    (sts obj)))
 
 ;;; ToDo: This isn't used yet. Might not be needed.
 #_(defn create-lookup-refs
@@ -383,7 +446,7 @@
 (defn get-schema
   "Return the map stored in the database for the given schema-urn. Useful in development.
     :filter-set - DB attribute to leave out (e.g. #{:db/id} or #{:db/doc-string}) "
-  [schema-urn & {:keys [resolve? filter-set] :or {resolve? true filter-set #{:doc/docString}}}]
+  [schema-urn & {:keys [resolve? filter-set] :or {resolve? true filter-set #{:db/id #_:doc/docString}}}]
   (when-let [ent  (d/q `[:find ?ent .
                          :where [?ent :schema/name ~schema-urn]] @(connect-atm))]
     (cond-> (dp/pull @(connect-atm) '[*] ent)

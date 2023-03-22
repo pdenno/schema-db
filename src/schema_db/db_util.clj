@@ -71,7 +71,11 @@
   ([str ns]
    (keyword ns str)))
 
-(defn condition-form
+(def diag (atom nil))
+(defn call-this [arg]
+  (reset! diag arg))
+
+#_(defn condition-form
   "Return the form with certain map values as keywords and certain map values zipped.
    Usually top-level call is a form representing a whole schema file. Walks schema."
   [form]
@@ -81,6 +85,8 @@
         #{:codeList/terms}]
     (letfn [(cf-aux [form]
               (cond (map? form) (reduce-kv (fn [m k v]
+                                             ;;(when-not (map? v) (call-this {:form form}))
+                                             (reset! diag {:v v})
                                              (if (needs-zip? k)
                                                (-> m
                                                    (assoc :zip/keys (-> v keys vec))
@@ -98,14 +104,15 @@
 
 ;;; ToDo: Spec about this?
 (defn storable?
-  "Return true if the argument contains no nils.
+  "Return true if the argument contains no nils and maps contain no :xml/tag.
    Such data cannot be stored in datahike."
   [obj]
   (let [ok? (atom true)]
     (letfn [(storable-aux [obj]
               (cond (not @ok?) false
                     (nil? obj) (reset! ok? false)
-                    (map? obj) (reset! ok? (reduce-kv (fn [result _ v] (cond (not @ok?) false
+                    (map? obj) (reset! ok? (reduce-kv (fn [result k v] (cond (not @ok?) false
+                                                                             (= k :xml/tag) false
                                                                              (not result) false
                                                                              (nil? v) false
                                                                              :else (storable-aux v)))

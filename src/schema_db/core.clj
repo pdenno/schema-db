@@ -19,7 +19,7 @@
    [schema-db.db-util            :as du     :refer [db-cfg-atm connect-atm]]
    [schema-db.generic-schema     :as gen-s  :refer [read-schema-file]]
    [schema-db.schema             :as schema :refer [db-schema]]
-   [schema-db.schema-util        :as su]
+   [schema-db.schema-util        :as su     :refer [simplify-temps]]
    [schema-db.std-schema] ; Needed for mount
    [schema-db.util               :as util]
    [taoensso.timbre              :as log]))
@@ -31,11 +31,14 @@
 ;;;     :model/sequence should imply a modeling intent such as from :xsd/sequence.
 ;;; (3) It is assumed that the generation of db.cardinality/many things is localized.
 ;;;     There aren't safeguards against assoc replacing a value already generated.
+;;; (4) db attributes in the model namespace refer to generally-recognized modeling concepts in XSD and other data definition languages.
+;;;     db attributes in the schema namespace refer to more specific modeling concepts of normative schema.
 
 ;;; ToDo:
+;;;    * :fn/type :element is pretty worthless, can I do better?
+;;;      -  Get :fn/type into everything. BTW, CEFACT schema have  <ccts:Acronym>BBIE</ccts:Acronym>
 ;;;    * The best thing to do with docs is alway collect them, but eliminate them in presentation like I optionally do with :db/id.
 ;;;    * elem-props-r only works for UBL schema.
-;;;    * Get :sp/function into everything. BTW, CEFACT schema have  <ccts:Acronym>BBIE</ccts:Acronym>
 ;;;    * Maybe split this file into something in src/dev and something in src/main/app/server (which is where the pathom stuff is).
 ;;;      But then I wonder what would remain in src/main/app/model.
 
@@ -61,7 +64,7 @@
 (def oagis-10-8-root  (str src-dir "/OAGIS/10.8.4/ModuleSet/Model/"))
 (def qif-root         (str src-dir "/QIF/3.0/xsd/"))
 (def michael-root     (str src-dir "/michaelQIF/"))
-(def elena-root       (str src-dir "/misc/elena/2023-02-09/"))
+(def elena-root       (str src-dir "/misc/elena/aside/" #_"/misc/elena/2023-02-09/"))
 
 (defonce bad-file-on-rebuild? (atom #{})) ; For debugging
 
@@ -73,7 +76,7 @@
   (let [db-content
         (-> path
             read-schema-file
-            su/squash-temp-sequences
+            su/simplify-temps
             su/update-schema-type
             vector)]
     (try
@@ -84,7 +87,7 @@
                (log/error "Error adding" path ":" e)))
         (do (swap! bad-file-on-rebuild? conj path)
             (reset! diag db-content)
-            (log/error "Schema-map contains nils and cannot be stored." path)))
+            (log/error "Schema-map contains nils or :xml/tag and cannot be stored." path)))
       (catch Exception e
         (swap! bad-file-on-rebuild? conj path)
         (log/error "Error checking storable?" path ":" e)))))
@@ -166,7 +169,7 @@
     (d/transact (connect-atm)
                 (mapv #(-> {}
                            (assoc :db/id (:s/ent %))
-                           (assoc :schema/includedSchemas (:s/include %)))
+                           (assoc :schema/includedSchema (:s/include %)))
                       (filter #(contains? % :s/include) with-urn)))))
 
 (defn postprocess-schemas!
@@ -177,9 +180,9 @@
   (update-bad-files!))
 
 (defn create-db!
-  "Create the database if :rebuild? is true, otherwise just set the connection atom, conn."
+  "Create the database if :rebuild? is true."
   []
-  (util/config-log :info)
+  (util/config-log :info) ; Prevent DH debugging messages.
   (when (:rebuild-db? @db-cfg-atm)
     (reset! bad-file-on-rebuild? #{})
     (when (d/database-exists? @db-cfg-atm) (d/delete-database @db-cfg-atm))
@@ -187,8 +190,8 @@
     (d/transact (connect-atm) db-schema)
     ;(add-schema-files! (str ubl-root "maindoc"))
     ;(add-schema-files! (str ubl-root "common"))
-    ;(add-schema-files! (str oagis-10-8-root "Nouns"))
-    ;(add-schema-files! (str oagis-10-8-root "Platform/2_7/Common"))
+    (add-schema-files! (str oagis-10-8-root "Nouns"))
+    (add-schema-files! (str oagis-10-8-root "Platform/2_7/Common"))
     ;(add-schema-files! (str qif-root "QIFApplications"))
     ;(add-schema-files! (str qif-root "QIFLibrary"))
     (add-schema-files! elena-root)
