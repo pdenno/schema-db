@@ -63,8 +63,8 @@
 (def ubl-root         (str src-dir "/OASIS/UBL-2.3/xsdrt/"))
 (def oagis-10-8-root  (str src-dir "/OAGIS/10.8.4/ModuleSet/Model/"))
 (def qif-root         (str src-dir "/QIF/3.0/xsd/"))
-(def michael-root     (str src-dir "/michaelQIF/"))
-(def elena-root       (str src-dir "/misc/elena/aside/" #_"/misc/elena/2023-02-09/"))
+(def michael-root     (str src-dir "/misc//michael/QIF/"))
+(def elena-root       (str src-dir "/misc/elena/2023-02-09/"))
 
 (defonce bad-file-on-rebuild? (atom #{})) ; For debugging
 
@@ -190,12 +190,12 @@
     (d/transact (connect-atm) db-schema)
     ;(add-schema-files! (str ubl-root "maindoc"))
     ;(add-schema-files! (str ubl-root "common"))
-    (add-schema-files! (str oagis-10-8-root "Nouns"))
-    (add-schema-files! (str oagis-10-8-root "Platform/2_7/Common"))
-    ;(add-schema-files! (str qif-root "QIFApplications"))
-    ;(add-schema-files! (str qif-root "QIFLibrary"))
-    (add-schema-files! elena-root)
-    ;;(add-schema-files! michael-root) ; Currently has nils
+    ;(add-schema-files! (str oagis-10-8-root "Nouns"))
+    ;(add-schema-files! (str oagis-10-8-root "Platform/2_7/Common"))
+    (add-schema-files! (str qif-root "QIFApplications"))
+    (add-schema-files! (str qif-root "QIFLibrary"))
+    ;(add-schema-files! elena-root)
+    ;(add-schema-files! michael-root) ; Currently has nils
     (postprocess-schemas!)
     (log/info "Created schema DB")))
 

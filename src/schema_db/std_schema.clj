@@ -13,17 +13,18 @@
 ;;; ToDo: Need file type for QIF Library files
 (defparse :generic/library-schema
   [xmap]
-  (rewrite-xsd xmap :generic/xsd-file))
+  (binding [*prefix* "type-3"]
+    (rewrite-xsd xmap :generic/xsd-file)))
 
 ;;; (8) Return a :schema/def
 ;;;     The :model/sequence here can be a vector instead???
 ;;; Simplify this like the OAGIS one!
 (defparse :ubl/message-schema
   [xmap]
-  (let [short-name (second (re-matches  #"[\w,\:\d]+\:(\w+)\-\d" (:schema/name xmap)))]
-    (binding [*prefix* "model"]
+  (binding [*prefix* "model"]
+    (let [short-name (second (re-matches  #"[\w,\:\d]+\:(\w+)\-\d" (:schema/name xmap)))]
       (as-> xmap ?x
-        (assoc ?x :schema/importedSchemas (imported-schemas ?x))
+        (assoc ?x :schema/importedSchema (imported-schemas ?x))
         (assoc ?x :schema/shortName (or short-name :short-name-not-found))
         (if-let [typedefs (not-empty (filter #(xml-type? % :xsd/complexType) (-> (xpath ?x :xsd/schema) :xml/content)))]
           (assoc ?x (keyword *prefix* "inlinedTypedef")
@@ -40,7 +41,6 @@
   (binding [*prefix* "model"]
     (-> (merge-warn [xmap (generic-rewrite xmap)])
         (dissoc :xml/ns-info :xml/content))))
-
 
 (defparse :xsd/element
   [xelem]
@@ -65,86 +65,91 @@
 (declare uq-dt-common q-dt-common)
 
 (defparse :generic/unqualified-dtype-schema [xmap {:skip-doc-processing? true}]
-  (let [content (-> (xpath xmap :xsd/schema) :xml/content)
-        elems   (not-empty (filter #(xml-type? % :xsd/element) content))
-        types   (not-empty (filter #(xml-type? % :xsd/complexType) content))]
-    (cond-> xmap
-      elems (assoc  :schema/content (mapv #(-> (rewrite-xsd %)
-                                                (assoc :fn/type :type-ref))
-                                           elems))
-      types (update :schema/content into (mapv uq-dt-common types))
-      true (dissoc :xml/ns-info :xml/content))))
+  (binding [*prefix* "element"]
+    (let [content (-> (xpath xmap :xsd/schema) :xml/content)
+          elems   (not-empty (filter #(xml-type? % :xsd/element) content))
+          types   (not-empty (filter #(xml-type? % :xsd/complexType) content))]
+      (cond-> xmap
+        elems (assoc  :schema/content (mapv #(-> (rewrite-xsd %)
+                                                 (assoc :fn/type :typeRef))
+                                            elems))
+        types (update :schema/content into (mapv uq-dt-common types))
+        true (dissoc :xml/ns-info :xml/content)))))
 
 (defparse :generic/qualified-dtype-schema [xmap]
-  (-> xmap
-      (assoc :schema/content (mapv q-dt-common
-                                    (filter #(or (xml-type? % :xsd/complexType) ; ToDo: Is that really it?
-                                                 (xml-type? % :xsd/element))
-                                            (-> (xpath xmap :xsd/schema) :xml/content))))
-      (assoc :schema/importedSchemas (imported-schemas xmap))
-      (assoc :mm/comment "The :schema/imported-schema is used to lookup the type being restricted.")
-      (dissoc :xml/ns-info :xml/content))) ; ToDo: remove :xml/content from this dissoc if you aren't using :schema/content
+  (binding [*prefix* "component"]
+    (-> xmap
+        (assoc :schema/content (mapv q-dt-common
+                                     (filter #(or (xml-type? % :xsd/complexType) ; ToDo: Is that really it?
+                                                  (xml-type? % :xsd/element))
+                                             (-> (xpath xmap :xsd/schema) :xml/content))))
+        (assoc :schema/importedSchema (imported-schemas xmap))
+        (assoc :mm/comment "The :schema/imported-schema is used to lookup the type being restricted.")
+        (dissoc :xml/ns-info :xml/content)))) ; ToDo: remove :xml/content from this dissoc if you aren't using :schema/content
 
 (defparse :oasis/component-schema
   [xmap]
-  (let [topic (-> xmap :schema/name su/schema-topic) ; not set yet
-        cc-type (cond (= topic "Components, CommonAggregate" ) :ABIE
-                      (= topic "Components, CommonBasic"     ) :BBIE
-                      (= topic "Components, CommonExtensions") :extensions
-                      :else                                    :unknown)
-        elems (->> (xpath xmap :xsd/schema)
-                   :xml/content
-                   (filter #(xml-type? % :xsd/element))
-                   not-empty)
-        comps (->> (xpath xmap :xsd/schema)
-                   :xml/content
-                   (filter #(xml-type? % :xsd/complexType))
-                   not-empty)
-        schemas (-> xmap imported-schemas not-empty)]
-    (as->
-        (cond-> xmap
-          true  (assoc  :schema/content [])
-          elems (update :schema/content into (mapv #(-> (rewrite-xsd % :xsd/element)
-                                                         (assoc :fn/type :type-ref))
-                                                    elems))
-          comps (update :schema/content into
-                        (mapv (fn [cplx]
-                                (as-> (rewrite-xsd cplx :xsd/complexType) ?t
-                                 (if (:sp/type ?t) (assoc ?t :term/type (:sp/type ?t)) ?t)
-                                 (assoc ?t :fn/componentType cc-type)
-                                 (dissoc ?t :sp/type)))
-                              comps))
-          schemas (assoc :schema/importedSchemas schemas))
-        ?r
-      (if (-> ?r :schema/content empty?) (dissoc ?r :schema/content) ?r)
-      (dissoc ?r :xml/ns-info :xml/content))))
+  (binding [*prefix* "component"]
+    (let [topic (-> xmap :schema/name su/schema-topic) ; not set yet
+          cc-type (cond (= topic "Components, CommonAggregate" ) :ABIE
+                        (= topic "Components, CommonBasic"     ) :BBIE
+                        (= topic "Components, CommonExtensions") :extensions
+                        :else                                    :unknown)
+          elems (->> (xpath xmap :xsd/schema)
+                     :xml/content
+                     (filter #(xml-type? % :xsd/element))
+                     not-empty)
+          comps (->> (xpath xmap :xsd/schema)
+                     :xml/content
+                     (filter #(xml-type? % :xsd/complexType))
+                     not-empty)
+          schemas (-> xmap imported-schemas not-empty)]
+      (as->
+          (cond-> xmap
+            true  (assoc  :schema/content [])
+            elems (update :schema/content into (mapv #(-> (rewrite-xsd % :xsd/element)
+                                                          (assoc :fn/type :typeRef))
+                                                     elems))
+            comps (update :schema/content into
+                          (mapv (fn [cplx]
+                                  (as-> (rewrite-xsd cplx :xsd/complexType) ?t
+                                    (if (:sp/type ?t) (assoc ?t :term/type (:sp/type ?t)) ?t)
+                                    (assoc ?t :fn/componentType cc-type)
+                                    (dissoc ?t :sp/type)))
+                                comps))
+            schemas (assoc :schema/importedSchema schemas))
+          ?r
+        (if (-> ?r :schema/content empty?) (dissoc ?r :schema/content) ?r)
+        (dissoc ?r :xml/ns-info :xml/content)))))
 
 (defparse :generic/code-list-schema
   [xmap]
-  (let [content (-> (xpath xmap :xsd/schema) :xml/content)]
-    (as-> xmap ?x
-      (if (= (:schema/name ?x) "urn:oagis-10.6:CodeLists_1.xsd")
-        (do ; ToDo: This one is a combination of all the others. I don't yet see the point.
-          (log/warn "Skipping CodeLists_1.xsd")
-          (assoc ?x :mm/debug "Skipping Code List that is an aggregate of others."))
-        (assoc ?x :codeList/lists (mapv #(rewrite-xsd % :generic/code-list)
-                                        (filter #(xml-type? % :xsd/simpleType) content))))
-      (dissoc ?x :xml/ns-info :xml/content))))
+  (binding [*prefix* "codeList"]
+    (let [content (-> (xpath xmap :xsd/schema) :xml/content)]
+      (as-> xmap ?x
+        (if (= (:schema/name ?x) "urn:oagis-10.6:CodeLists_1.xsd")
+          (do ; ToDo: This one is a combination of all the others. I don't yet see the point.
+            (log/warn "Skipping CodeLists_1.xsd")
+            (assoc ?x :mm/debug "Skipping Code List that is an aggregate of others."))
+          (assoc ?x :schema/codeList (mapv #(rewrite-xsd % :generic/code-list)
+                                           (filter #(xml-type? % :xsd/simpleType) content))))
+        (dissoc ?x :xml/ns-info :xml/content)))))
 
 (defparse :iso/iso-20022-schema
   ;; Translate an ISO 20022 schema, financial codes as simple and complex types.
   [xmap]
-  (let [content (-> (xpath xmap :xsd/schema) :xml/content)]
-    (-> xmap
-        (assoc :schema/content
-               (mapv #(rewrite-xsd % :xsd/simpleType)
-                     (filter #(xml-type? % :xsd/simpleType) content)))
-        (update :schema/content ; ToDo: nils an uninvestigated problem in pain files.
-                conj
-                (filterv identity
-                         (mapv #(rewrite-xsd % :xsd/complexType)
-                              (filter #(xml-type? % :xsd/complexType) content))))
-        (dissoc :xml/content :xml/ns-info))))
+  (binding [*prefix* "codeList"]
+    (let [content (-> (xpath xmap :xsd/schema) :xml/content)]
+      (-> xmap
+          (assoc :schema/content
+                 (mapv #(rewrite-xsd % :xsd/simpleType)
+                       (filter #(xml-type? % :xsd/simpleType) content)))
+          (update :schema/content ; ToDo: nils an uninvestigated problem in pain files.
+                  conj
+                  (filterv identity
+                           (mapv #(rewrite-xsd % :xsd/complexType)
+                                 (filter #(xml-type? % :xsd/complexType) content))))
+          (dissoc :xml/content :xml/ns-info)))))
 
 ;;;--------------------- Details (not files) ------------------------------------------
 ;;; Process any documentation or annotation to whatever form is most appropriate.
@@ -170,14 +175,17 @@
               (cond (and (map? obj) (some cct-obj? (keys obj))) (swap! docs conj obj),
                     (vector? obj) (doall (map cd obj))
                     (string? obj) (swap! docs conj obj)
-                    :else (log/warn "Unknown doc" obj)))]
+                    ;; The when because sometimes we see something like this: <ccts_Definition />.
+                    :else (when obj (log/warn "Unknown doc" obj))))]
       (cd node)
       @docs)))
 
 (defparse :xsd/annotation
   [xmap]
   (when-let [docs (-> xmap generic-rewrite collect-docs not-empty)]
-    {:has/documentation docs}))
+    (let [typ (if (every? map? docs) :has/documentation :has/docString)
+          docs (if (== 1 (count docs)) (first docs) docs)]
+      {typ docs})))
 
 (defparse :xsd/documentation
   [xmap]
@@ -186,15 +194,19 @@
 ;;; This picks up all forms of CCT special tags. (See schema.clj.)
 (defparse :generic/simple-cct
   [xmap]
-  (let [db-ident (get cct-tag2db-ident-map (:xml/tag xmap))
-        info (-> db-schema+ db-ident :mm/info)]
-    (if (= :cct/BusinessContext db-ident)
-      {db-ident (generic-rewrite xmap)}
-      (cond-> {}
-        true                          (assoc db-ident (:xml/content xmap))
-        (-> xmap :xml/attrs :source)  (assoc :has/source (-> xmap :xml/attrs :source))
-        (:fn info)                    (assoc :fn/type (:fn info))
-        (:number? info)               (update db-ident read-string)))))
+  (when-let [content (-> xmap :xml/content not-empty)]
+    (let [db-ident (get cct-tag2db-ident-map (:xml/tag xmap))
+          info (-> db-schema+ db-ident :mm/info)
+          typ (-> db-schema+ db-ident :db/valueType)
+          readable? (#{:db.type/long :db.type/float :db.type/number, :db.type/double :db.type/boolean} typ)]
+      (if (#{:cct/BusinessContext :cct/ContentComponentValueDomain} db-ident)
+        {db-ident (generic-rewrite xmap)}
+        (cond-> {}
+          true                          (assoc db-ident content)
+          (-> xmap :xml/attrs :source)  (assoc :has/source (-> xmap :xml/attrs :source))
+          (:fn info)                    (assoc :fn/type (:fn info))
+          readable?                     (update db-ident read-string)
+          (= typ :db.type/keyword)      (update db-ident keyword))))))
 
 ;;; This is for processing the :xsd/documentation under the simpleContent (supplemental component)
 ;;; under complexContent the :xsd/documentation has the main component.
@@ -313,41 +325,22 @@
   ;; Walk through a code list collecting terms.
   [xmap]
   (assert (xml-type? xmap :xsd/simpleType))
-  (let [content (-> {}
-                    (assoc :codeList/name (-> xmap :xml/attrs :name))
-                    (assoc :fn/type :codeList)
-                    (assoc :xsd/restriction (rewrite-xsd (xpath xmap :xsd/restriction) :xsd/restriction))
-                    ;; I'm assuming they all look like this: #:xml{:tag :xsd/enumeration, :attrs {:value "Add"}}
-                    (assoc :codeList/terms (mapv #(-> % :xml/attrs :value)
-                                                 (filterv #(xml-type? % :xsd/enumeration)
-                                                          (:xml/content (xpath xmap :xsd/restriction))))))]
+  (reset! diag xmap)
+  (let [name?  (-> xmap :xml/attrs :name)
+        id?    (-> xmap :xml/attrs :id)
+        rest?  (when-let [res (xpath xmap :xsd/restriction)] (-> res rewrite-xsd not-empty))
+        ;; I'm assuming they all look like this: #:xml{:tag :xsd/enumeration, :attrs {:value "Add"}}
+        terms? (-> (mapv #(-> % :xml/attrs :value)
+                         (filterv #(xml-type? % :xsd/enumeration)
+                                  (:xml/content (xpath xmap :xsd/restriction)))) not-empty)
+        union?  (when-let [res (xpath xmap :xsd/union)] (-> res rewrite-xsd not-empty))
+        content (cond-> {}
+                  name?  (assoc :codeList/name name?)
+                  id?    (assoc :codeList/id id?)
+                  rest?  (assoc :codeList/restriction rest?)
+                  terms? (assoc :codeList/terms terms?)
+                  union? (assoc :codeList/union union?))]
     {:model/codeList content}))
-
-#_(defparse :generic/code-list
-  ;; Walk through a code list collecting terms.
-  [xmap]
-  (assert (xml-type? xmap :xsd/simpleType))
-  (-> {}
-      (assoc :codeList/name (-> xmap :xml/attrs :name))
-      (assoc :fn/type :codeList)
-      (assoc :xsd/restriction (rewrite-xsd (xpath xmap :xsd/restriction) :xsd/restriction))
-      (assoc :codeList/terms (reduce (fn [m v]
-                                       (merge m (rewrite-xsd v :generic/code-term)))
-                                     {}
-                                     (filter #(xml-type? % :xsd/enumeration)
-                                             (:xml/content (xpath xmap :xsd/restriction)))))
-      (dissoc :xsd/restriction)))
-
-#_(defparse :cct-doc
-  [xmap]
-  (let [db-ident (-> (:xml/tag ?x) cct-tag2db-ident-map)
-        use-number? (#{:db.type/float :db.type/number, :db.type/double} (-> db-schema+ db-ident :db/valueType))
-        has-source?  (-> db-schema+ db-ident :mm/info :def?)]
-    (if (= db-ident :cct/BusinessContext
-           {db-ident (->> xmap :xml/content (mapv rewrite-xsd))})
-      (cond-> {db-ident (:xml/content xmap)}
-        use-number? (update db-ident read-string)
-        has-source? (assoc :doc/docString (-> xmap :xml/attrs :source))))))
 
 (def non-standard-oagis-schema-topics
   (let [pat {"urn:oagis-~A:CodeList_ConstraintTypeCode_1.xsd"            "Codelist, ConstraintTypes",

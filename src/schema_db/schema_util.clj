@@ -17,6 +17,13 @@
 (def ^:dynamic *prefix* "String naming a namespace for attributes whose name appears in lots of objects (e.g. model, element, complexType, simpleType)"
   "unassigned")
 
+(defn ignored-tag?
+  "Return true if the tag is to be ignored."
+  [obj]
+  (when-let [tag (:xml/tag obj)]
+    (and (= "ROOT" (namespace tag))
+         (= "srt_" (-> tag name (subs 0 4))))))
+
 ;;; This does file-level dispatching as well as the details.
 (defn rewrite-xsd-dispatch
   [obj & [specified]]
@@ -37,8 +44,9 @@
                (generic-schema-type? stype) stype,
 
                ;; Special simplifications
-               (and (map? obj) (contains? simple-xsd?           (:xml/tag obj)))  :simple-xsd,
+               (and (map? obj) (contains? simple-xsd?           (:xml/tag obj)))  :generic/simple-xsd-elem,
                (and (map? obj) (contains? cct-tag2db-ident-map  (:xml/tag obj)))  :generic/simple-cct,
+               (and (map? obj) (ignored-tag? obj))                                :ignore/ignore,
                (and (map? obj) (contains? obj :xml/tag))                          (:xml/tag obj),
                (and (map? obj) (contains? obj :ref))                              :ref
                ; ToDo: this one for polymorphism #{:xsd/element :xsd/choice} etc.
@@ -383,6 +391,7 @@
       (catch Exception _e (log/warn "Could not read xsd attribute declared a number: k = " k " v = " v)))
       (log/warn "Unknown attribute type: " k)))
 
+;;; ToDo: All of the things currently in ns "xsd" should be in a NS called "xsdAttr".
 (defn xsd-attr-map
   "Return a map of attributes where
     (1) the keys of a few special ones are in the argument namespace (a string) and the rest are in 'xsd', and_

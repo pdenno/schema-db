@@ -24,23 +24,9 @@
   [attrs-map]
   (reduce-kv (fn [res k v] (-> res (conj (name k)) (conj (str v)))) [] attrs-map))
 
-;;; ToDo: Have a parse state and indent
-;;;     (when *debugging?*
-;;;       (println (cl-format nil "~A==> ~A" (util/nspaces (* 3 (-> ~pstate :tags count))) ~tag)))
-;;; Establishes rewrite-xsd methods.
-(defmacro defparse [tag [arg props] & body]
-  `(defmethod rewrite-xsd ~tag [~arg & ~'_]
-     ;; Once *skip-doc-processing?* is true, it stays so through the dynamic scope of the where it was set.
-     (when @debugging? (println "defparse tag = " ~tag))
-     (binding [su/*skip-doc-processing?* (or su/*skip-doc-processing?* (:skip-doc-processing? ~props))]
-       (let [[~arg doc-string#] (su/obj-doc-string ~arg)
-             result# (do ~@body)]
-         (cond-> result#
-           (and doc-string# (map? result#))    (assoc :doc/docString doc-string#)
-           (:xml/attrs result#)                (-> (assoc :xml/attributes (-> result# :xml/attrs process-attrs-map))
-                                                   (dissoc :xml/attrs)))))))
-
-(defmacro defparse [tag [arg props] & body]
+;;; ToDo: I think it is pretty odd that we call process-attrs-map here, especially so because
+;;;       sometimes specific attrs are mapped again, differently.
+(defmacro defparse [tag [arg _props] & body]
   `(defmethod rewrite-xsd ~tag [~arg & ~'_]
      ;; Once *skip-doc-processing?* is true, it stays so through the dynamic scope of the where it was set.
      (when @debugging? (println "defparse tag = " ~tag))
@@ -49,6 +35,10 @@
            (:xml/attrs result#)  (-> (assoc :xml/attributes (-> result# :xml/attrs process-attrs-map))
                                      (dissoc :xml/attrs))))))
 
+(defparse :ignore/ignore
+  ;; This is used, for example, for :xml/tags that aren't going to be processed, such as :ROOT/srt_StateCode (from Michael's QIF thing).
+  [_xmap]
+  nil)
 
 (defn imported-schemas
   "Using the :xsd/import, return a map of the prefixes used in the schema."
@@ -88,10 +78,7 @@
   (-> path
       read-clean
       rewrite-xsd
-      #_dbu/condition-form))
-
-(defn call-this [arg]
-  (reset! diag arg))
+      #_dbu/condition-form)) ; ToDo: Review this; it might be worth keeping.
 
 ;;; ToDo: Pull attribute processing out of defparse and put it here???
 (defn generic-rewrite
@@ -104,7 +91,6 @@
            (map? content)    (rewrite-xsd content),
            (string? content) content,
            :else (do (log/warn "Unexpected content: " content)
-                     (call-this {:cnt content :xmap xmap})
                      content))))
 
 ;;;===============  File Level =========================================================
@@ -119,9 +105,12 @@
 (defparse :xsd/schema
   [xmap]
   (binding [*prefix* "model"]
-    (-> xmap
-        (assoc :schema/content (mapv rewrite-xsd (:xml/content xmap)))
-        (dissoc :xml/tag :xml/content))))
+    (let [schemas? (-> xmap imported-schemas not-empty)
+          content (->> xmap :xml/content (remove #(xml-type? % :xsd/import)) vec)]
+      (cond-> xmap
+        schemas?   (assoc :schema/importedSchema schemas?)
+        true       (assoc :schema/content (mapv rewrite-xsd content))
+        true       (dissoc :xml/tag :xml/content)))))
 
 (defparse :xsd/simpleType
   [xmap]
@@ -146,15 +135,16 @@
   [xmap]
   (let [attrs (:xml/attrs xmap)]
     (cond-> {:sp/xsdType :any}
-      true (assoc :doc/docString ; ToDo: Investigate later
+      true (assoc :has/docString ; ToDo: Investigate later
                   (str (:namespace attrs) "|" (:processContents attrs)))
       (:minOccurs attrs) (assoc :sp/minOccurs (-> attrs :minOccurs keyword))
       (:maxOccurs attrs) (assoc :sp/maxOccurs (-> attrs :maxOccurs keyword)))))
 
 (defparse :xsd/group
   [xmap]
-  (-> {:sp/xsdType :any}
-      (assoc :sp/ref (-> xmap :xml/attrs :ref))))
+  (let [ref? (-> xmap :xml/attrs :ref)]
+    (cond-> {:sp/xsdType :any}
+      ref? (assoc :sp/ref ref?))))
 
 (defparse :xsd/sequence
   [xmap]
@@ -225,18 +215,18 @@
 (defparse :xsd/restriction
   [obj]
   (let [cnt (:xml/content obj)
-        m (if (not-empty cnt) (rewrite-xsd cnt :extend-restrict-content) {})]
-    (-> m
-        (assoc :fn/type :restriction)
-        (assoc :fn/base (-> obj :xml/attrs :base)))))
+        m (if (not-empty cnt) (rewrite-xsd cnt :extend-restrict-content) {})
+        base? (-> obj :xml/attrs :base)]
+    (cond-> m ; I don't see one without the base, yet I'm getting a
+      base? (assoc :model/restrictionBase base?))))
 
 (defparse :xsd/list
   [obj]
   {:xsd/listItemType (-> obj :xml/attrs :itemType str)})
 
-;;; This one is for everything in the mapschema/simple-xsd? {:xsd/length  :number, ...}
+;;; This one is for everything in the map schema/simple-xsd? {:xsd/length  :number, ...}
 ;;; Note that the tag is unchanged.
-(defparse :simple-xsd
+(defparse :generic/simple-xsd-elem
   [obj]
   (let [tag (:xml/tag obj)]
     {tag
@@ -246,25 +236,38 @@
 
 ;;; (9) :xsd/extend :xsd/restrict don't have sequences; don't add one. Return the restriction.
 (defparse :extend-restrict-content
-  [content]
-  (let [enums (atom [])
-        result (mapv #(if (xml-type? % :xsd/enumeration)
-                        (swap! enums conj (-> % :xml/attrs :value))
-                        (rewrite-xsd %))
-                     content)]
-    (if (not-empty @enums)
-      {:model/enumeration @enums},
-      {:temp/sequence result})))
+  [xmap]
+  (let [enums (atom [])]
+    (doall (mapv #(if (xml-type? % :xsd/enumeration)
+                    (swap! enums conj (-> % :xml/attrs :value))
+                    (rewrite-xsd %))
+                 xmap))
+    (when (not-empty @enums) {:model/enumeration @enums})))
 
 (defparse :xsd/attributeGroup
   [xmap]
-  (let [doc (-> xmap (xpath- :xsd/annotation :xsd/documentation) :xml/content)]
+  (let [doc (-> xmap (xpath- :xsd/annotation :xsd/documentation) :xml/content)
+        ref? (-> xmap :xml/attrs :ref)]
     {:xsd/attributeGroup
      (cond-> {}
-       (not-empty doc)   (assoc :sp/docString doc)
-       true              (assoc :xsdAttrGroup/data (-> xmap :xml/attrs :ref)))}))
+       (not-empty doc)   (assoc :has/docString doc)
+       ref?              (assoc :xsdAttrGroup/data ref?))}))
 
 (defparse :xsd/union
   [xmap]
   {:model/union
    (-> xmap :xml/attrs :memberTypes (clojure.string/split  #"\s+") vec)})
+
+(defparse :xsd/key
+  [xmap]
+  (when-let [name (-> xmap :xml/attrs :name)]
+    {:xsd/key name}))
+
+(defparse :xsd/keyref
+  [xmap]
+  (when-let [name (-> xmap :xml/attrs :name)]
+    {:xsd/keyRef name}))
+
+(defparse :xsd/unique  [xmap]
+  (when-let [name (-> xmap :xml/attrs :name)]
+    {:xsd/unique name}))

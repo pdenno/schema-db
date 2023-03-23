@@ -4,13 +4,16 @@
 
 (def db-schema+
   "Defines information for the datahike schema plus additional information about the property in :mm/info"
-  {#_#_:bie/definition
-   #:db{:cardinality :db.cardinality/one, :valueType :db.type/string, :mm/info {:fn :ACC, :def? true, :score? true}},
+  {;; ---------------------- attribute (ToDo: another way? simpler?)
+   :attribute/id
+   #:db{:cardinality :db.cardinality/one, :valueType :db.type/string}
+   :attribute/name
+   #:db{:cardinality :db.cardinality/one, :valueType :db.type/string}
    ;; ---------------------- cct (core components). The capitalization here is like in the CCTS spec.
    :cct/ACCDefinition
    #:db{:cardinality :db.cardinality/one, :valueType :db.type/string, :mm/info {:fn :ACC, :def? true, :score? true}},
    :cct/ACCRevisionNumber
-   #:db{:cardinality :db.cardinality/one, :valueType :db.type/long, :mm/info {:fn :ACC, :score? true :number? true}},
+   #:db{:cardinality :db.cardinality/one, :valueType :db.type/long, :mm/info {:fn :ACC, :score? true}},
    :cct/ACC_GUID
    #:db{:cardinality :db.cardinality/one, :valueType :db.type/string, :unique :db.unique/identity, :mm/info {:fn :ACC, :score? true}},
    :cct/ASCCDefinition
@@ -18,9 +21,9 @@
    :cct/ASCCPDefinition
    #:db{:cardinality :db.cardinality/one, :valueType :db.type/string, :mm/info {:fn :ASCC, :def? true, :score? true :property? true}},
    :cct/ASCCRevisionNumber
-   #:db{:cardinality :db.cardinality/one, :valueType :db.type/long, :mm/info {:fn :ASCC, :score? true :number? true}},
+   #:db{:cardinality :db.cardinality/one, :valueType :db.type/long, :mm/info {:fn :ASCC, :score? true}},
    :cct/ASCCPRevisionNumber
-   #:db{:cardinality :db.cardinality/one, :valueType :db.type/long, :mm/info {:fn :ASCC, :score? true :number? true :property? true}},
+   #:db{:cardinality :db.cardinality/one, :valueType :db.type/long, :mm/info {:fn :ASCC, :score? true  :property? true}},
    :cct/ASCC_GUID
    #:db{:cardinality :db.cardinality/one, :valueType :db.type/string, :unique :db.unique/identity, :mm/info {:fn :ASCC, :score? true}},
    :cct/ASCCP_GUID
@@ -30,14 +33,16 @@
    :cct/BCCPDefinition
    #:db{:cardinality :db.cardinality/one, :valueType :db.type/string, :mm/info {:fn :BCC, :def? true, :score? true :property? true}},
    :cct/BCCRevisionNumber
-   #:db{:cardinality :db.cardinality/one, :valueType :db.type/long, :mm/info {:fn :BCC, :score? true :number? true}},
+   #:db{:cardinality :db.cardinality/one, :valueType :db.type/long, :mm/info {:fn :BCC, :score? true }},
    :cct/BCCPRevisionNumber
-   #:db{:cardinality :db.cardinality/one, :valueType :db.type/long, :mm/info {:fn :BCC, :score? true :number? true :property? true}},
+   #:db{:cardinality :db.cardinality/one, :valueType :db.type/long, :mm/info {:fn :BCC, :score? true :property? true}},
    :cct/BCC_GUID
    #:db{:cardinality :db.cardinality/one, :valueType :db.type/string, :unique :db.unique/identity, :mm/info {:fn :BCC, :score? true}},
    :cct/BCCP_GUID
    #:db{:cardinality :db.cardinality/one, :valueType :db.type/string, :unique :db.unique/identity,
         :mm/info {:fn :BCC, :score? true :property? true}},
+   :cct/BIEEntityTypeCode
+      #:db{:cardinality :db.cardinality/one, :valueType :db.type/string},
    :cct/BusinessContext
    #:db{:cardinality :db.cardinality/many, :valueType :db.type/ref, :mm/info {:fn :BusinessContext, :score? true}},
    :cct/Cardinality
@@ -61,10 +66,12 @@
    #:db{:cardinality :db.cardinality/one, :valueType :db.type/string, :doc "Used in :cct/cctsBusinessContext, at least"},
    :cct/ObjectClass
    #:db{:cardinality :db.cardinality/one, :valueType :db.type/string},
+   :cct/ObjectClassTermName
+   #:db{:cardinality :db.cardinality/one, :valueType :db.type/string},
    :cct/PrimitiveType
    #:db{:cardinality :db.cardinality/one, :valueType :db.type/keyword},
    :cct/PrimitiveTypeName
-   #:db{:cardinality :db.cardinality/one, :valueType :db.type/keyword},
+   #:db{:cardinality :db.cardinality/one, :valueType :db.type/string},
    :cct/PropertyTermName
    #:db{:cardinality :db.cardinality/one, :valueType :db.type/string},
    :cct/QualifierTerm
@@ -96,17 +103,33 @@
    :cct/SupplementaryComponentValueDomain,
    #:db{:cardinality :db.cardinality/many, :valueType :db.type/ref},
    ;; ------------------ codeList
-   :codeList/lists
+   :codeList/id
+   #:db{:cardinality :db.cardinality/many, :valueType :db.type/ref :unique :db.unique/identity},
+   #_#_:codeList/lists
    #:db{:cardinality :db.cardinality/many, :valueType :db.type/ref},
    :codeList/name
    #:db{:cardinality :db.cardinality/one, :valueType :db.type/string},
    :codeList/terms
    #:db{:cardinality :db.cardinality/many, :valueType :db.type/ref},
+   :codeList/restriction
+   #:db{:cardinality :db.cardinality/one, :valueType :db.type/ref},
+   :codeList/union
+   #:db{:cardinality :db.cardinality/one, :valueType :db.type/ref},
    ;; ------------------ complexType (a structured type such as :xsd/complexType)
    :complexType/id
    #:db{:cardinality :db.cardinality/one, :valueType :db.type/string, :unique :db.unique/identity
         :doc "unique ID for this complexType."}
    :complexType/name
+   #:db{:cardinality :db.cardinality/one, :valueType :db.type/string},
+   :complexType/simpleContent
+   #:db{:cardinality :db.cardinality/one, :valueType :db.type/ref},
+   ;; ------------------ component (a structured type such as :xsd/complexType)
+   :component/complexType
+   #:db{:cardinality :db.cardinality/many, :valueType :db.type/ref},
+   :component/id
+   #:db{:cardinality :db.cardinality/one, :valueType :db.type/string, :unique :db.unique/identity
+        :doc "unique ID for this complexType."}
+   :component/name
    #:db{:cardinality :db.cardinality/one, :valueType :db.type/string},
    ;; ------------------ element
    :element/complexType
@@ -192,7 +215,11 @@
         :doc "something with without internal structure, often known by its value"}
    :model/union
    #:db{:cardinality :db.cardinality/many, :valueType :db.type/string},
+   :model/restrictionBase
+   #:db{:cardinality :db.cardinality/one, :valueType :db.type/string},
    ;; ------------------ schema (message schema level concepts)
+   :schema/codeList
+   #:db{:cardinality :db.cardinality/many, :valueType :db.type/ref}
    :schema/content
    #:db{:cardinality :db.cardinality/many, :valueType :db.type/ref,
         :doc "typically this includes the entire content of an xsd file. It found is a map that classifies the schema with e.g :schema/name, sdo etc."},
@@ -227,7 +254,7 @@
    #:db{:cardinality :db.cardinality/many, :valueType :db.type/ref,
         :doc "This is typically structured content referencing CCT concepts (e.g. BContext, Component def, etc\n
               ToDo: It might be reasonable to merge the value of this into the parent and eliminate the property. "},
-   :sp/docString
+   #_#_:sp/docString
    #:db{:cardinality :db.cardinality/many, :valueType :db.type/string,
       :doc "when :xsd/documentation is a string, rather than :sp/supplementary\n ToDo: Should I just use :doc/docString ?"},
    :sp/maxOccurs
@@ -259,9 +286,17 @@
    #:db{:cardinality :db.cardinality/many, :valueType :db.type/ref},
    :xsd/choice
    #:db{:cardinality :db.cardinality/many, :valueType :db.type/ref},
+   :xsd/default
+   #:db{:cardinality :db.cardinality/one, :valueType :db.type/string},
+   :xsd/fixed
+   #:db{:cardinality :db.cardinality/one, :valueType :db.type/string},
    :xsd/fractionDigits
    #:db{:cardinality :db.cardinality/one, :valueType :db.type/long},
    :xsd/id
+   #:db{:cardinality :db.cardinality/one, :valueType :db.type/string},
+   :xsd/key
+   #:db{:cardinality :db.cardinality/one, :valueType :db.type/string},
+   :xsd/keyRef
    #:db{:cardinality :db.cardinality/one, :valueType :db.type/string},
    :xsd/length
    #:db{:cardinality :db.cardinality/one, :valueType :db.type/long},
@@ -293,11 +328,15 @@
    #:db{:cardinality :db.cardinality/one, :valueType :db.type/string},
    :xsd/restriction
    #:db{:cardinality :db.cardinality/one, :valueType :db.type/ref},
+   :xsd/substitutionGroup
+   #:db{:cardinality :db.cardinality/one, :valueType :db.type/string},
    :xsd/totalDigits
    #:db{:cardinality :db.cardinality/one, :valueType :db.type/long},
    :xsd/type
    #:db{:cardinality :db.cardinality/one, :valueType :db.type/string},
    :xsd/use
+   #:db{:cardinality :db.cardinality/one, :valueType :db.type/string},
+   :xsd/unique
    #:db{:cardinality :db.cardinality/one, :valueType :db.type/string},
    :xsdAttrGroup/data
    #:db{:cardinality :db.cardinality/many, :valueType :db.type/string},
