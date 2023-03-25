@@ -19,7 +19,7 @@
    [schema-db.db-util            :as du     :refer [db-cfg-atm connect-atm]]
    [schema-db.generic-schema     :as gen-s  :refer [read-schema-file]]
    [schema-db.schema             :as schema :refer [db-schema]]
-   [schema-db.schema-util        :as su     :refer [simplify-temps]]
+   [schema-db.schema-util        :as su]
    [schema-db.std-schema] ; Needed for mount
    [schema-db.util               :as util]
    [taoensso.timbre              :as log]))
@@ -59,8 +59,12 @@
 
 (def diag (atom nil))
 
+(def ignore-file?
+  #{})
+
 ;;; ToDo: Make the following environment variables.
-(def ubl-root         (str src-dir "/OASIS/UBL-2.3/xsdrt/"))
+;;;(def ubl-root         (str src-dir "/OASIS/UBL-2.3/xsdrt/"))
+(def ubl-root         (str src-dir "/OASIS/UBL-2.3/xsd/"))
 (def oagis-10-8-root  (str src-dir "/OAGIS/10.8.4/ModuleSet/Model/"))
 (def qif-root         (str src-dir "/QIF/3.0/xsd/"))
 (def michael-root     (str src-dir "/misc//michael/QIF/"))
@@ -73,24 +77,26 @@
 (defn add-schema-file!
   [path]
   (reset! diag-path path)
-  (let [db-content
-        (-> path
-            read-schema-file
-            su/simplify-temps
-            su/update-schema-type
-            vector)]
+  (if (ignore-file? path)
+    (log/warn "Ignoring file owing to it being on ignore list: " path)
     (try
-      (if (du/storable? db-content)
-        (try (d/transact (connect-atm) db-content) ; Use d/transact here, not transact! which uses a future.
-             (catch Exception e
-               (swap! bad-file-on-rebuild? conj path)
-               (log/error "Error adding" path ":" e)))
-        (do (swap! bad-file-on-rebuild? conj path)
-            (reset! diag db-content)
-            (log/error "Schema-map contains nils or :xml/tag and cannot be stored." path)))
+      (let [db-content
+            (-> path
+                read-schema-file
+                ;su/simplify-temps
+                su/update-schema-type
+                vector)]
+        (if (du/storable? db-content)
+          (try (d/transact (connect-atm) db-content) ; Use d/transact here, not transact! which uses a future.
+               (catch Exception e
+                 (swap! bad-file-on-rebuild? conj path)
+                 (log/error "Error adding" path ":" e)))
+          (do (swap! bad-file-on-rebuild? conj path)
+              (reset! diag db-content)
+              (log/error "Schema-map contains nils or :xml/tag and cannot be stored." path))))
       (catch Exception e
         (swap! bad-file-on-rebuild? conj path)
-        (log/error "Error checking storable?" path ":" e)))))
+        (log/error "Error in add-schema-file. path= " path ":" e)))))
 
 (defn add-schema-files!
   "Read a directory of files into the database.
@@ -188,14 +194,14 @@
     (when (d/database-exists? @db-cfg-atm) (d/delete-database @db-cfg-atm))
     (d/create-database @db-cfg-atm)
     (d/transact (connect-atm) db-schema)
-    ;(add-schema-files! (str ubl-root "maindoc"))
-    ;(add-schema-files! (str ubl-root "common"))
-    ;(add-schema-files! (str oagis-10-8-root "Nouns"))
-    ;(add-schema-files! (str oagis-10-8-root "Platform/2_7/Common"))
+    (add-schema-files! (str ubl-root "maindoc"))
+    (add-schema-files! (str ubl-root "common"))
+    (add-schema-files! (str oagis-10-8-root "Nouns"))
+    (add-schema-files! (str oagis-10-8-root "Platform/2_7/Common"))
     (add-schema-files! (str qif-root "QIFApplications"))
     (add-schema-files! (str qif-root "QIFLibrary"))
-    ;(add-schema-files! elena-root)
-    ;(add-schema-files! michael-root) ; Currently has nils
+    (add-schema-files! elena-root)
+    (add-schema-files! michael-root)
     (postprocess-schemas!)
     (log/info "Created schema DB")))
 

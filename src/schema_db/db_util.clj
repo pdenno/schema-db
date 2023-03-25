@@ -104,38 +104,28 @@
 
 ;;; ToDo: Spec about this?
 (defn storable?
-  "Return true if the argument contains no nils and maps contain no :xml/tag.
+  "Return true if the argument does not contain:
+      - nils
+      - maps containing :xml/tag
+      - the keyword :failure/rewrite-xsd-nil-method
    Such data cannot be stored in datahike."
   [obj]
   (let [ok? (atom true)]
-    (letfn [(storable-aux [obj]
+    (letfn [(sto [obj]
               (cond (not @ok?) false
                     (nil? obj) (reset! ok? false)
                     (map? obj) (reset! ok? (reduce-kv (fn [result k v] (cond (not @ok?) false
                                                                              (= k :xml/tag) false
                                                                              (not result) false
                                                                              (nil? v) false
-                                                                             :else (storable-aux v)))
+                                                                             :else (sto v)))
                                                       true
                                                       obj))
-                    (coll? obj) (reset! ok? (every? storable-aux obj))
+                    (coll? obj)    (reset! ok? (every? sto obj))
+                    (keyword? obj) (if (= obj :failure/rewrite-xsd-nil-method) (reset! ok? false) true)
                     :else true))]
-      (storable-aux obj))
+      (sto obj))
     @ok?))
-
-#_(defn find-nils
-  "Return the form with all its :db/id resolved."
-  [form]
-  (letfn [(find-nils-aux [obj]
-            (cond
-              (map? obj) (reduce-kv (fn [_ _ v] (if (nil? v)
-                                                  (log/info "nil:" v)
-                                                  (find-nils-aux v)))
-                                    {}
-                                    obj)
-              (coll? obj) (do (some #(when (nil? %) (log/info "nil:" obj)) obj)
-                              (map find-nils-aux obj))))]
-    (find-nils-aux form)))
 
 (defn xpath-internal
   [content props path-in]

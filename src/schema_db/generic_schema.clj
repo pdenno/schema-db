@@ -4,8 +4,8 @@
    [clojure.string]
    [schema-db.db-util     :as dbu    :refer [xpath xpath- xml-type?]]
    [schema-db.schema      :as schema :refer [simple-xsd?]]
-   [schema-db.schema-util :as su     :refer [*prefix* schema-sdo schema-spec schema-version schema-subversion schema-type schema-name
-                                             merge-warn xsd-attr-map]]
+   [schema-db.schema-util :as su     :refer [xml-group-by *prefix* schema-sdo schema-spec schema-version schema-subversion schema-type schema-name
+                                             merge-warn xsd-attr-map singleize]]
    [taoensso.timbre                  :as log]))
 
 (def debugging? (atom false))
@@ -13,11 +13,14 @@
 
 (defmulti rewrite-xsd #'su/rewrite-xsd-dispatch)
 
+(defn call-this [arg]
+  (reset! diag arg))
+
 (defmethod rewrite-xsd nil [obj & schema]
   (if schema
-    (log/warn "No method for obj/schema.")
-    (log/warn "No method for obj."))
-  (reset! diag {:obj obj :schema schema})
+    (log/warn "No method for obj = " obj " schema = " schema)
+    (log/warn "No method for obj = " obj))
+  (call-this {:obj obj :schema schema})
   :failure/rewrite-xsd-nil-method)
 
 (defn process-attrs-map
@@ -32,8 +35,8 @@
      (when @debugging? (println "defparse tag = " ~tag))
        (let [result# (do ~@body)]
          (cond-> result#
-           (:xml/attrs result#)  (-> (assoc :xml/attributes (-> result# :xml/attrs process-attrs-map))
-                                     (dissoc :xml/attrs))))))
+           (:xml/attrs result#) (-> (assoc :xml/attributes (-> result# :xml/attrs process-attrs-map))
+                                    (dissoc :xml/attrs))))))
 
 (defparse :ignore/ignore
   ;; This is used, for example, for :xml/tags that aren't going to be processed, such as :ROOT/srt_StateCode (from Michael's QIF thing).
@@ -42,32 +45,51 @@
 
 (defn imported-schemas
   "Using the :xsd/import, return a map of the prefixes used in the schema."
+  [ischemas ns-info]
+  (reset! diag ischemas)
+  (reduce (fn [res schema]
+            (if-let [prefix (-> ns-info :u->ps (get schema) first)]
+              (conj res {:import/prefix prefix :import/referencedSchema schema})
+              (do (log/warn "No prefix for schema " schema) res)))
+          []
+          (map #(-> % :xml/attrs :namespace) ischemas)))
+
+(defn root2xsd
+  "ROOT is 'http://www.w3.org/2001/XMLSchema'; switch ROOT tags to :xsd/whatever and remove 'ROOT' as a ns."
   [xmap]
-  (let [ischemas
-        (->>
-         (xpath xmap :xsd/schema)
-         :xml/content
-         (filter #(xml-type? % :xsd/import))
-         (map #(-> % :xml/attrs :namespace)))
-        ns-info (:xml/ns-info xmap)]
-    (reduce (fn [res schema]
-               (if-let [prefix (-> ns-info :u->ps (get schema) first)]
-                 (conj res {:import/prefix prefix :import/referencedSchema schema})
-                 (do (log/warn "No prefix for schema " schema) res)))
-            []
-            ischemas)))
+  (assert (= "http://www.w3.org/2001/XMLSchema"
+             (-> xmap :xml/ns-info :p->u (get "ROOT"))))
+  (letfn [(r2xsd [obj]
+            (cond (map? obj)                         (reduce-kv (fn [m k v]
+                                                                  (if (and (keyword? k) (= "ROOT" (namespace k)))
+                                                                    (assoc m (keyword "xsd" (name k)) (r2xsd v))
+                                                                    (assoc m k                        (r2xsd v))))
+                                                                {} obj)
+                  (and (keyword? obj)
+                       (= "ROOT" (namespace obj)))   (keyword "xsd" (name obj))
+                  (vector? obj)                      (mapv r2xsd obj)
+                  :else                              obj))]
+    (-> (r2xsd xmap)
+        (update-in [:xml/ns-info :p->u]  #(dissoc % "ROOT"))
+        (update-in [:xml/ns-info :p->u]  #(assoc % "xsd" "http://www.w3.org/2001/XMLSchema"))
+        (update-in [:xml/ns-info :u->ps] #(assoc % "http://www.w3.org/2001/XMLSchema" ["xsd"])))))
 
 (defn read-clean
   "Return a map structure containing the :xml/content (cleaned-up) :ns-info and :schema info."
   [pathname]
   (let [xml (dbu/read-xml pathname)]
     (as-> xml ?xmap
-        (assoc ?xmap :schema/sdo (schema-sdo ?xmap))
-        (assoc ?xmap :schema/spec (schema-spec ?xmap))
-        (assoc ?xmap :schema/version (schema-version ?xmap))
-        (assoc ?xmap :schema/subversion (schema-subversion ?xmap))
-        (assoc ?xmap :schema/type (schema-type ?xmap))
-        (assoc ?xmap :schema/name (schema-name ?xmap)))))
+      (if (= "http://www.w3.org/2001/XMLSchema"
+             (-> ?xmap :xml/ns-info :p->u (get "ROOT")))
+        (root2xsd ?xmap)
+        ?xmap)
+      (assoc ?xmap :schema/sdo (schema-sdo ?xmap))
+      (assoc ?xmap :schema/spec (schema-spec ?xmap))
+      (assoc ?xmap :schema/version (schema-version ?xmap))
+      (assoc ?xmap :schema/subversion (schema-subversion ?xmap))
+      (assoc ?xmap :schema/type (schema-type ?xmap))
+      (assoc ?xmap :schema/name (schema-name ?xmap)))))
+
 
 ;;; (read-schema-file "data/testing/elena/Company A - Invoice.xsd")
 (defn read-schema-file
@@ -80,46 +102,42 @@
       rewrite-xsd
       #_dbu/condition-form)) ; ToDo: Review this; it might be worth keeping.
 
-;;; ToDo: Pull attribute processing out of defparse and put it here???
-(defn generic-rewrite
-  "Call rewrite on :xml/content, either with mapv or singlely. dissoc :xml/content."
-  [xmap]
-  (let [content (:xml/content xmap)]
-    (cond (vector? content) (if (> (count content) 1)
-                              (mapv rewrite-xsd content)
-                              (-> content first rewrite-xsd))
-           (map? content)    (rewrite-xsd content),
-           (string? content) content,
-           :else (do (log/warn "Unexpected content: " content)
-                     content))))
-
 ;;;===============  File Level =========================================================
 (defparse :generic/xsd-file
   ;; The new perspective is that these are all just XSD files, so I borrowed this from :oagis/message-schema
   ;; If that's wrong, see the old perspective in the repository!
   [xmap]
     (binding [*prefix* "model"]
-    (-> (merge-warn [xmap (generic-rewrite xmap)])
-        (dissoc :xml/ns-info :xml/content))))
+    (let [[_ short-name?] (re-matches  #"[\w,\:\d]+\:(\w+)\-\d" (:schema/name xmap))
+          {:keys [import other _attrs]} (xml-group-by (xpath xmap :xsd/schema) :xsd/import)]
+      (reset! diag other)
+      (cond-> xmap
+        short-name?  (assoc :schema/shortName short-name?)
+        import       (assoc :schema/importedSchema (imported-schemas import (:xml/ns-info xmap)))
+        other        (assoc :schema/content (->> other (mapv rewrite-xsd) singleize))
+        true         (dissoc :xml/ns-info :xml/content)))))
 
+;;; Because :std/message-schema handles imports, and process :xsd/schema, it only comes through here
+;;; if it doesn't go through :std/message-schema. Thus I do the import thing here too.
 (defparse :xsd/schema
   [xmap]
   (binding [*prefix* "model"]
-    (let [schemas? (-> xmap imported-schemas not-empty)
-          content (->> xmap :xml/content (remove #(xml-type? % :xsd/import)) vec)]
+    (let [{:keys [import other _attrs]} (xml-group-by (xpath xmap :xsd/schema) :xsd/import)]
       (cond-> xmap
-        schemas?   (assoc :schema/importedSchema schemas?)
-        true       (assoc :schema/content (mapv rewrite-xsd content))
+        import     (assoc :schema/importedSchema (imported-schemas import (:xml/ns-info xmap)))
+        other      (assoc :schema/content (->> other (mapv rewrite-xsd) singleize))
         true       (dissoc :xml/tag :xml/content)))))
 
 (defparse :xsd/simpleType
   [xmap]
-  {(keyword *prefix* "simpleType") (generic-rewrite xmap)})
+  {(keyword *prefix* "simpleType")
+   (->> xmap :xml/content (mapv rewrite-xsd) singleize)})
 
 ;;; See, for example, /opt/messaging/sources/OAGIS/10.8.4/ModuleSet/Model/Platform/2_7/Common/DataTypes/BusinessDataType_1.xsd
 (defparse :xsd/simpleContent
   [xmap]
-  {(keyword *prefix* "simpleContent") (generic-rewrite xmap)})
+  {(keyword *prefix* "simpleContent")
+   (->> xmap :xml/content (mapv rewrite-xsd) singleize)})
 
 ;;; https://stackoverflow.com/questions/57020857/xsd-difference-between-complexcontent-and-sequence
 ;;; While both xs:complexContent and xs:sequence can appear as child elements of xs:complexType, they serve completely different purposes:
@@ -129,7 +147,8 @@
   [xmap]
   (when-not (== 1 (count (:xml/content xmap)))
     (log/warn "xsd:complexContent has many :xml/content.")
-    {(keyword *prefix* "complexContent") (rewrite-xsd (-> xmap :xml/content first))}))
+    {(keyword *prefix* "complexContent")
+     (rewrite-xsd (-> xmap :xml/content first))}))
 
 (defparse :xsd/any
   [xmap]
@@ -151,25 +170,16 @@
   (let [content (:xml/content xmap)]
     {:model/sequence (mapv rewrite-xsd content)}))
 
-;;; ToDo: better that this would be a set of things unhandled.
-;;; Write them as :mm/unhandledXML (a stringified map).
 (defparse :xsd/anyAttribute
   [xmap]
-  (log/warn "anyAttribute = " xmap)
-  {})
+  (let [{:keys [other attrs]} (xml-group-by xmap)
+        attrs-map (xsd-attr-map attrs "anyAttribute")
+        content? (->> other (mapv rewrite-xsd) not-empty)]
+  {:xsd/anyAttribute (if content?
+                       (merge-warn (into [attrs-map] content?))
+                       attrs-map)}))
 
-;;; <xsd:attribute name="typeCode" type="CodeType_1E7368" id="oagis-id-f17dd1fe69dc4728b41eb8086a8621e3" />
-#_(defparse :xsd/attribute
-  [obj]
-  (let [attrs (:xml-attrs obj)
-        required? (= "required" (:use attrs))]
-    (cond-> {}
-      (:name attrs) (assoc :sp/name (:name attrs)) ; ToDo: no name???
-      (:type attrs) (assoc :sp/type (:type attrs)) ; Needs work, see :etsi
-      required? (assoc :sp/minOccurs 1)
-      required? (assoc :sp/maxOccurs 1)
-      true (assoc :sp/xsdType :attribute))))
-
+ ;;; <xsd:attribute name="typeCode" type="CodeType_1E7368" id="oagis-id-f17dd1fe69dc4728b41eb8086a8621e3" />
 (defparse :xsd/attribute
   [xmap]
   {:model/attribute (xsd-attr-map (:xml/attrs xmap) "attribute")})
@@ -185,40 +195,50 @@
   (assert (= :xsd/complexType (:xml/tag xmap)))
   (let [old-prefix *prefix*]
     (binding [*prefix* "complexType"]
-      (let [attrs? (-> (xsd-attr-map (:xml/attrs xmap) "complexType") not-empty)
+      (let [{:keys [attributes other attrs]} (xml-group-by xmap :xsd/attribute)
+            attrs? (-> (xsd-attr-map attrs "complexType") not-empty) ; ToDo: Could be other attrs.
             name?  (:complexType/name attrs?)
             id?    (:complexType/id attrs?)
-            attributes? nil #_(->> (:xml/content xmap) ; <========================================================
-                                 (filter #(xml-type? % :xsd/attribute))
-                                 generic-rewrite
-                                 not-empty)
-            other-content? (map rewrite-xsd (remove #(xml-type? % :xsd/attribute) (:xml/content xmap)))
+            attributes? (->> attributes (mapv rewrite-xsd) singleize not-empty)
+            other?      (->> other (mapv rewrite-xsd) not-empty)
             content (cond-> {}
                       name?       (assoc :complexType/name name?)
                       id?         (assoc :complexType/id   id?)
                       attributes? (assoc :complexType/attributes attributes?))]
-        {(keyword old-prefix "complexType") (merge-warn (conj other-content? content))}))))
+        {(keyword old-prefix "complexType")
+         (if other?
+           (merge-warn (into [content] other?))
+           content)}))))
 
 (defparse :xsd/include
   [xmap]
   {:mm/tempInclude (-> xmap :xml/attrs :schemaLocation)})
 
-(defparse :xsd/extension
-  [obj]
-  (let [cnt (:xml/content obj)
-        m (if cnt (rewrite-xsd cnt :extend-restrict-content) {})]
-    (-> m
-        (assoc :fn/type :extension)
-        (assoc :fn/base (-> obj :xml/attrs :base)))))
+;;; (9) :xsd/extend :xsd/restrict don't have sequences; don't add one. Return the restriction.
+(defn extend-restrict
+  [xmap restrict|extend]
+  (let [{:keys [enumeration other attrs]} (xml-group-by xmap :xsd/enumeration)
+        enums? (->> enumeration (mapv #(-> % :xml-attrs :value)) (filter not-empty) not-empty)
+        other? (->> other (remove char?) (mapv rewrite-xsd) not-empty)
+        attrs-map? (-> (xsd-attr-map attrs (name restrict|extend)) not-empty)
+        attr-name (case restrict|extend :restrict :restriction/attributes :extend :extension/attributes)
+        typ       (case restrict|extend :restrict :model/restriction :extend :model/extension)
+        content? (cond-> {}
+                   attrs-map? (assoc attr-name attrs-map?)
+                   enums?     (assoc :model/enumeration enums?)
+                   true       vector
+                   true       not-empty)]
+    {typ (merge-warn (if content?
+                       (into content? (if other? other? []))
+                       other?))}))
 
-;;; restrictions can have enumerations, factionDigits totalDigits minInclusive pattern minLength maxLength
+(defparse :xsd/extension
+  [xmap]
+  (extend-restrict xmap :extend))
+
 (defparse :xsd/restriction
-  [obj]
-  (let [cnt (:xml/content obj)
-        m (if (not-empty cnt) (rewrite-xsd cnt :extend-restrict-content) {})
-        base? (-> obj :xml/attrs :base)]
-    (cond-> m ; I don't see one without the base, yet I'm getting a
-      base? (assoc :model/restrictionBase base?))))
+  [xmap]
+  (extend-restrict xmap :restrict))
 
 (defparse :xsd/list
   [obj]
@@ -233,16 +253,6 @@
      (if (= :number (simple-xsd? tag))
        (-> obj :xml/attrs :value read-string)
        (-> obj :xml/attrs :value))}))
-
-;;; (9) :xsd/extend :xsd/restrict don't have sequences; don't add one. Return the restriction.
-(defparse :extend-restrict-content
-  [xmap]
-  (let [enums (atom [])]
-    (doall (mapv #(if (xml-type? % :xsd/enumeration)
-                    (swap! enums conj (-> % :xml/attrs :value))
-                    (rewrite-xsd %))
-                 xmap))
-    (when (not-empty @enums) {:model/enumeration @enums})))
 
 (defparse :xsd/attributeGroup
   [xmap]

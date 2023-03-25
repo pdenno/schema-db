@@ -24,34 +24,53 @@
     (and (= "ROOT" (namespace tag))
          (= "srt_" (-> tag name (subs 0 4))))))
 
+;;; UBL-xmldsig-core-schema-2.3.xsd:
+;;; <simpleType name="CryptoBinary">
+;;;  <restriction base="base64Binary">
+;;;  </restriction>
+;;; </simpleType>
+;;; is example of one with string crap content [\newline \space \space].
+;;; I think I need this to be able to return string content, so I'm going
+;;; to address this in the caller, gs/extend-restrict. ToDo: Not investigated.
+(defn xml-group-by
+  "Return a map of the :xml/content of the argument grouped by the keys (without the ns) and 
+   :other if the :xml/tag is not one of the provided keys."
+  [xmap & tag-keys]
+  (let [tkey? (set tag-keys)]
+    (cond-> (group-by
+             #(if-let [k (tkey? (:xml/tag %))] (-> k name keyword) :other)
+             (:xml/content xmap))
+      (:xml/attrs xmap) (assoc :attrs (:xml/attrs xmap)))))
+
 ;;; This does file-level dispatching as well as the details.
 (defn rewrite-xsd-dispatch
   [obj & [specified]]
    (let [stype (:schema/type obj)
-         schema-sdo  (:schema/sdo obj)
-         meth
-         (cond ;; Optional 2nd argument specifies method to call
-               (keyword? specified) specified,
+         schema-sdo  (:schema/sdo obj)]
+     (cond ;; Optional 2nd argument specifies method to call
+       (keyword? specified) specified,
+       
+       ;; Files (schema-type)
+       (and (= stype :ccts/message-schema)    (= schema-sdo :oasis))  :std/message-schema, 
+       (and (= stype :ccts/message-schema)    (= schema-sdo :oagi))   :std/message-schema,
+       (and (= stype :ccts/component-schema)  (= schema-sdo :oagi))   :generic/qualified-dtype-schema,
+       (and (= stype :ccts/component-schema)  (= schema-sdo :oasis))  :oasis/component-schema,
+       (and (= stype :generic/message-schema) (= schema-sdo :qif))    :generic/xsd-file,
+       
+       (special-schema-type? stype) stype,
+       (generic-schema-type? stype) stype,
+       
+       ;; Special simplifications
+       (and (map? obj) (contains? simple-xsd?           (:xml/tag obj)))  :generic/simple-xsd-elem,
+       (and (map? obj) (contains? cct-tag2db-ident-map  (:xml/tag obj)))  :generic/simple-cct,
+       (and (map? obj) (ignored-tag? obj))                                :ignore/ignore,
+       (and (map? obj) (= "ccts" (-> obj :xml/tag namespace)))            :oasis/component-def,
+       (and (map? obj) (contains? obj :xml/tag))                          (:xml/tag obj),
+       (and (map? obj) (contains? obj :ref))                              :ref
+                                        ; ToDo: this one for polymorphism #{:xsd/element :xsd/choice} etc.
+       (and (map? obj) (contains? obj :xml/tag))                           (:xml/tag obj)
+       :else (throw (ex-info "No method for obj: " {:obj obj})))))
 
-               ;; Files (schema-type)
-               (and (= stype :ccts/message-schema)    (= schema-sdo :oasis))  :ubl/message-schema,
-               (and (= stype :ccts/message-schema)    (= schema-sdo :oagi))   :oagis/message-schema,
-               (and (= stype :ccts/component-schema)  (= schema-sdo :oagi))   :generic/qualified-dtype-schema,
-               (and (= stype :ccts/component-schema)  (= schema-sdo :oasis))  :oasis/component-schema,
-               (and (= stype :generic/message-schema) (= schema-sdo :qif))    :generic/xsd-file,
-
-               (special-schema-type? stype) stype,
-               (generic-schema-type? stype) stype,
-
-               ;; Special simplifications
-               (and (map? obj) (contains? simple-xsd?           (:xml/tag obj)))  :generic/simple-xsd-elem,
-               (and (map? obj) (contains? cct-tag2db-ident-map  (:xml/tag obj)))  :generic/simple-cct,
-               (and (map? obj) (ignored-tag? obj))                                :ignore/ignore,
-               (and (map? obj) (contains? obj :xml/tag))                          (:xml/tag obj),
-               (and (map? obj) (contains? obj :ref))                              :ref
-               ; ToDo: this one for polymorphism #{:xsd/element :xsd/choice} etc.
-               (contains? obj :xml/tag)                                       (:xml/tag obj))]
-     meth))
 
 ;;; This is bug-ridden and should be avoided!
 (defn obj-doc-string
@@ -351,6 +370,10 @@
       (cond-> schema
         @bie? (assoc :schema/type :cct/bie)))))
 
+(defn singleize
+  [obj]
+  (if (== 1 (count obj)) (first obj) obj))
+
 ;;; Where this is used I'm typically trying to finesse the output into somethign less
 ;;; clunky than the shape of XSD/XML. ToDo: Still experimental!
 (defn merge-warn
@@ -460,3 +483,4 @@
                          :where [?ent :schema/name ~schema-urn]] @(connect-atm))]
     (cond-> (dp/pull @(connect-atm) '[*] ent)
       resolve? (du/resolve-db-id (connect-atm) filter-set))))
+

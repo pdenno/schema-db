@@ -1,4 +1,9 @@
-(ns dev.util)
+(ns dev.util
+  (:require
+   [clojure.set]
+   [datahike.api      :as d]
+   [schema-db.db-util :refer [connect-atm]]
+   [schema-db.schema  :refer [db-schema+]]))
 
 (defn find-root
   "Walking through the object, collect
@@ -17,16 +22,25 @@
       (fr obj))
     @res-atm))
 
-;;; Here is what I'v found so far:
-#_#{[:xml/tag :ROOT/ccts_BasedACC_GUID]                      ; string content
-     :ROOT/ccts_BasedASCCRevisionNumber                       ; string/number content
-    :ROOT/ccts_BasedASCCDefinition                           ; ref ('source' attr and string content)
-    [:xml/tag :ROOT/ccts_GUID]                               ; string content
-    :ROOT/ccts_BusinessContext                               : ref
-    [:xml/tag :ROOT/ccts_BasedACCRevisionNumber]             ; string/number content
-    :ROOT/ccts_BasedBCCDefinition                            ; ref ('source' attr and string content)
-    :ROOT/ccts_BasedBCC_GUID                                 ; string content
-    [:xml/tag :ROOT/ccts_BasedACCDefinition]                 ; ref ('source' attr and string content)
-    [:xml/tag :ROOT/ccts_Name]                               ; string content
-    :ROOT/ccts_BasedASCC_GUID                                ; string content
-    :ROOT/ccts_BasedBCCRevisionNumber}                       ; string/number content
+;;;================================ DB analytics ==============================
+(defn unused-db-idents []
+  (-> (clojure.set/difference
+       (-> db-schema+ keys set)
+       (-> (d/q '[:find [?typ ...]
+                  :where [_ ?typ _]]
+                @(connect-atm))
+           set))
+      sort vec))
+
+(defn ccts-used
+  "Return a sorted vector of the CCTS used."
+  [obj]
+  (let [used (atom #{})]
+    (letfn [(cu [obj]
+              (cond (map? obj)       (doseq [[k v] (seq obj)]
+                                       (when (= "cct" (namespace k))
+                                         (swap! used conj k))
+                                       (cu v))
+                    (vector? obj)    (doall (map cu obj))))]
+      (cu obj)
+      (-> used deref sort vec))))

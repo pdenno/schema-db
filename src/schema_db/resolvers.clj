@@ -32,8 +32,7 @@
 ;;; (pathom-resolve [{:ccts/message-schema [:list/id  {:list/schemas [:sdb/schema-id :schema/name]}]}]) ; RIGHT!
 ;;; (pathom-resolve [{[:list/id :ccts/message-schema] {:list/schemas [:sdb/schema-id :schema/name]}}])  ; WRONG! WHY?
 (pco/defresolver list-id->list-schemas [env {:list/keys [id]}] ; e.g :list/id = :ccts/message-schema
-  {::pco/input  [:list/id]
-   ::pco/output [{:list/schemas [:sdb/schema-id :schema/name]}]}
+  {::pco/output [{:list/schemas [:sdb/schema-id :schema/name]}]}
   (when (= id :ccts/message-schema)
     (when-let [schema-maps (->>
                             (d/q `[:find ?ent ?name ?topic
@@ -58,8 +57,7 @@
 ;;; (pathom-resolve [{[:sdb/schema-id 3569] [:schema/name]}])
 ;;; (pathom-resolve [{[:sdb/schema-id 3569] [:model/sequence]}])
 (pco/defresolver sdb-schema-id->props [env {:sdb/keys [schema-id]}]
-  {::pco/input  [:sdb/schema-id]
-   ::pco/output [:schema/name :sdb/schema-id :schema/sdo :schema/type :schema/topic
+  {::pco/output [:schema/name :sdb/schema-id :schema/sdo :schema/type :schema/topic
                 :schema/subversion :model/inlinedTypedef :schema/spec
                 {:schema/importedSchema [:sdb/imported-schema-id]}
                 {:model/sequence [:sdb/elem-id]}]}
