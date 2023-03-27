@@ -33,7 +33,7 @@
 ;;; I think I need this to be able to return string content, so I'm going
 ;;; to address this in the caller, gs/extend-restrict. ToDo: Not investigated.
 (defn xml-group-by
-  "Return a map of the :xml/content of the argument grouped by the keys (without the ns) and 
+  "Return a map of the :xml/content of the argument grouped by the keys (without the ns) and
    :other if the :xml/tag is not one of the provided keys."
   [xmap & tag-keys]
   (let [tkey? (set tag-keys)]
@@ -49,17 +49,17 @@
          schema-sdo  (:schema/sdo obj)]
      (cond ;; Optional 2nd argument specifies method to call
        (keyword? specified) specified,
-       
+
        ;; Files (schema-type)
-       (and (= stype :ccts/message-schema)    (= schema-sdo :oasis))  :std/message-schema, 
+       (and (= stype :ccts/message-schema)    (= schema-sdo :oasis))  :std/message-schema,
        (and (= stype :ccts/message-schema)    (= schema-sdo :oagi))   :std/message-schema,
        (and (= stype :ccts/component-schema)  (= schema-sdo :oagi))   :generic/qualified-dtype-schema,
        (and (= stype :ccts/component-schema)  (= schema-sdo :oasis))  :oasis/component-schema,
        (and (= stype :generic/message-schema) (= schema-sdo :qif))    :generic/xsd-file,
-       
+
        (special-schema-type? stype) stype,
        (generic-schema-type? stype) stype,
-       
+
        ;; Special simplifications
        (and (map? obj) (contains? simple-xsd?           (:xml/tag obj)))  :generic/simple-xsd-elem,
        (and (map? obj) (contains? cct-tag2db-ident-map  (:xml/tag obj)))  :generic/simple-cct,
@@ -459,28 +459,31 @@
 
 
 ;;;=========================== Schema Operations ===========================================
+;;; (list-schemas :sdo :oagi)
 (defn list-schemas
-  "Return a list of schema, by default they are sorted by 'topic'"
-  [& {:keys [sdo sort?] :or {sort? true}}]
-  (let [base-names
-        (if sdo
-          (d/q `[:find [?n ...] :where [?s :schema/name ?n] [?s :schema/sdo ~sdo]] @(connect-atm))
-          (d/q '[:find [?n ...] :where [_ :schema/name ?n]] @(connect-atm)))]
-    (if sort?
-      (let [urns&topics (map (fn [urn topic] {:urn urn :topic topic})
-                             base-names
-                             (map q-schema-topic base-names))]
-        (->> urns&topics
-             (sort-by :topic)
-             (mapv :urn)))
-      (vec base-names))))
+  "Return a list of schema, by default they are sorted.
+   Attrs should be a list of attributes to return"
+  [& {:keys [sdo sort? _attrs] :or {sort? true sdo '_}}] ; ToDo: attrs
+  (let [result (d/q '[:find ?n ?sdo
+                      :keys schema/name schema/sdo
+                      :in $ ?sdo
+                      :where
+                      [?s :schema/name ?n]
+                      [?s :schema/sdo ?sdo]]
+                    @(connect-atm) sdo)]
+    (cond->> result
+      true (map :schema/name)
+      sort? sort
+      true vec)))
 
+;;; (get-schema "urn:oagi-10.unknown:elena.2023-02-09.ProcessInvoice-BC_1")
 (defn get-schema
   "Return the map stored in the database for the given schema-urn. Useful in development.
     :filter-set - DB attribute to leave out (e.g. #{:db/id} or #{:db/doc-string}) "
-  [schema-urn & {:keys [resolve? filter-set] :or {resolve? true filter-set #{:db/id #_:doc/docString}}}]
-  (when-let [ent  (d/q `[:find ?ent .
-                         :where [?ent :schema/name ~schema-urn]] @(connect-atm))]
+  [schema-name & {:keys [resolve? filter-set] :or {resolve? true filter-set #{:db/id}}}]
+  (when-let [ent  (d/q '[:find ?ent .
+                         :in $ ?schema-name
+                         :where [?ent :schema/name ?schema-name]]
+                       @(connect-atm) schema-name)]
     (cond-> (dp/pull @(connect-atm) '[*] ent)
       resolve? (du/resolve-db-id (connect-atm) filter-set))))
-

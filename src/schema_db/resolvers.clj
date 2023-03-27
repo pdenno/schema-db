@@ -31,9 +31,10 @@
 
 ;;; (pathom-resolve [{:ccts/message-schema [:list/id  {:list/schemas [:sdb/schema-id :schema/name]}]}]) ; RIGHT!
 ;;; (pathom-resolve [{[:list/id :ccts/message-schema] {:list/schemas [:sdb/schema-id :schema/name]}}])  ; WRONG! WHY?
-(pco/defresolver list-id->list-schemas [env {:list/keys [id]}] ; e.g :list/id = :ccts/message-schema
-  {::pco/output [{:list/schemas [:sdb/schema-id :schema/name]}]}
-  (when (= id :ccts/message-schema)
+;;; (pathom-resolve {:list/id :ccts/message-schema} [:schema/name])
+(pco/defresolver list-id->schema-list [env {:list/keys [id]}] ; e.g :list/id = :ccts/message-schema
+  {::pco/output [{:list/id [:sdb/schema-id :schema/name]}]}
+  (when (= id "ccts/message-schema")
     (when-let [schema-maps (->>
                             (d/q `[:find ?ent ?name ?topic
                                    :keys sdb/schema-id schema/name schema/topic
@@ -118,11 +119,12 @@
                  sdb-schema-id->sdb-schema-obj
                  sdb-schema-id->props
                  elem-props
-                 list-id->list-schemas
+                 list-id->schema-list
                  message-schema
                  data-file
                  current-system-time]))
 
+;;; (pathom-resolve {:list/id :ccts/message-schema} [:schema/name])
 (defn pathom-resolve
   "Uses the indexes to respond to a query.
    ident-map: a single-entry map, the key of which names an identity condition,
