@@ -25,9 +25,15 @@
   {:sdb/schema-id (d/q `[:find ?e . :where [?e :schema/name ~name]] @(connect-atm))})
 
 ;;; (pathom-resolve {:schema/name "urn:oagis-10.8.4:Nouns:Invoice"} [:sdb/schema-object])
-;;; [{"schema/name" : "urn:oagis-10.8.4:Nouns:Invoice"}, ["schema-object"]]
+;;; RM: $get(["schema/name" : "urn:oagis-10.8.4:Nouns:Invoice"], ["sdb/schema-object"]);
 (pco/defresolver sdb-schema-id->sdb-schema-obj [env {:sdb/keys [schema-id]}]
   {:sdb/schema-object (du/resolve-db-id {:db/id schema-id} (connect-atm) #{:db/id})})
+
+;;; COMPOUND: schema/name -> sdb/schema-object  -> :schema/content
+;;;           (pathom-resolve {:schema/name "urn:oagis-10.8.4:Nouns:Invoice"} [:schema/content])
+;;; RM: $get(["schema/name" : "urn:oagis-10.8.4:Nouns:Invoice"], ["schema/content"]);
+(pco/defresolver sdb-schema-object->schema-content [_env {:sdb/keys [schema-object]}]
+  {:schema/content (:schema/content schema-object)})
 
 ;;; (pathom-resolve [{:ccts/message-schema [:list/id  {:list/schemas [:sdb/schema-id :schema/name]}]}]) ; RIGHT!
 ;;; (pathom-resolve [{[:list/id :ccts/message-schema] {:list/schemas [:sdb/schema-id :schema/name]}}])  ; WRONG! WHY?
@@ -117,6 +123,7 @@
 (def indexes
   (pci/register [schema-name->sdb-schema-id
                  sdb-schema-id->sdb-schema-obj
+                 sdb-schema-object->schema-content
                  sdb-schema-id->props
                  elem-props
                  list-id->schema-list
