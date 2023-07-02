@@ -2,6 +2,18 @@
   (:require
    [clojure.spec.alpha :as s]))
 
+;;; ToDo: Decide on using ns cct or ccts for :schema/type. Currently:
+;;; (d/q '[:find ?type :where [_ :schema/type  ?type]] @(connect-atm))
+;;; #{[:ccts/message-schema] ; <==========
+;;;   [:generic/message-schema]
+;;;   [:generic/unqualified-dtype-schema]
+;;;   [:ccts/component-schema] ; <==========
+;;;   [:generic/library-schema]
+;;;   [:generic/code-list-schema]
+;;;   [:generic/xsd-file]
+;;;   [:generic/qualified-dtype-schema]
+;;;   [:cct/bie]} ; <==========
+
 (def db-schema+
   "Defines information for the datahike schema plus additional information about the property in :mm/info"
   {;; ---------------------- attribute (ToDo: another way? simpler?)
