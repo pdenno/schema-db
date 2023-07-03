@@ -66,9 +66,10 @@
 ;;;(def ubl-root         (str src-dir "/OASIS/UBL-2.3/xsdrt/"))
 (def ubl-root         (str src-dir "/OASIS/UBL-2.3/xsd/"))
 (def oagis-10-8-root  (str src-dir "/OAGIS/10.8.4/ModuleSet/Model/"))
+(def niem-root        (str src-dir "/NIEM/5.2/NIEM-Releases-niem-5.2/xsd/"))
 (def qif-root         (str src-dir "/QIF/3.0/xsd/"))
 (def michael-root     (str src-dir "/misc//michael/QIF/"))
-(def elena-root       (str src-dir "/misc/elena/2023-02-09/"))
+(def elena-root       (str src-dir "/misc/elena/"))
 
 (defonce bad-file-on-rebuild? (atom #{})) ; For debugging
 
@@ -86,6 +87,7 @@
                 ;su/simplify-temps
                 su/update-schema-type
                 vector)]
+        (reset! diag {:db-content db-content})
         (if (du/storable? db-content)
           (try (d/transact (connect-atm) db-content) ; Use d/transact here, not transact! which uses a future.
                (catch Exception e
@@ -141,10 +143,10 @@
     @unused))
 
 ;;; =================================== Schema-db post-processing ==============================
-(defn add-topics! []
-  (let [forms (reduce (fn [forms urn]
-                        (if-let [topic (su/schema-topic urn)]
-                          (conj forms {:schema/name urn :schema/topic topic})
+#_(defn add-topics! []
+  (let [forms (reduce (fn [forms name]
+                        (if-let [topic (su/schema-topic name)]
+                          (conj forms {:schema/name name :schema/topic topic})
                           forms))
                       []
                       (su/list-schemas))]
@@ -181,7 +183,7 @@
 (defn postprocess-schemas!
   "Do some additional work on schema already in the DB."
   []
-  (add-topics!)
+  #_(add-topics!)
   (fix-includes!)
   (update-bad-files!))
 
@@ -200,8 +202,15 @@
     (add-schema-files! (str oagis-10-8-root "Platform/2_7/Common"))
     (add-schema-files! (str qif-root "QIFApplications"))
     (add-schema-files! (str qif-root "QIFLibrary"))
-    (add-schema-files! elena-root)
-    (add-schema-files! michael-root)
+
+    (add-schema-files! (str elena-root "2023-02-09"))
+    (add-schema-files! (str elena-root "2023-07-02"))
+    (add-schema-files! (str niem-root "codes"))
+    (add-schema-files! (str niem-root "domains"))
+    (add-schema-files! (str niem-root "utility"))
+    (add-schema-file!  (str niem-root "niem-core.xsd"))
+
+    ;(add-schema-files! michael-root)
     (postprocess-schemas!)
     (log/info "Created schema DB")))
 

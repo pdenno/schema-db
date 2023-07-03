@@ -9,6 +9,7 @@
 ;;;   [:generic/unqualified-dtype-schema]
 ;;;   [:ccts/component-schema] ; <==========
 ;;;   [:generic/library-schema]
+;;;   [:generic/domain-schema] ; NIEM
 ;;;   [:generic/code-list-schema]
 ;;;   [:generic/xsd-file]
 ;;;   [:generic/qualified-dtype-schema]
@@ -20,6 +21,8 @@
    :attribute/id
    #:db{:cardinality :db.cardinality/one, :valueType :db.type/string}
    :attribute/name
+   #:db{:cardinality :db.cardinality/one, :valueType :db.type/string}
+   :attribute/ref
    #:db{:cardinality :db.cardinality/one, :valueType :db.type/string}
    ;; ---------------------- cct (core components). The capitalization here is like in the CCTS spec.
    :cct/ACCDefinition
@@ -143,6 +146,8 @@
    #:db{:cardinality :db.cardinality/one, :valueType :db.type/string},
    :codeList/terms
    #:db{:cardinality :db.cardinality/many, :valueType :db.type/ref},
+   :codeList/termName
+   #:db{:cardinality :db.cardinality/one, :valueType :db.type/string},
    :codeList/restriction
    #:db{:cardinality :db.cardinality/one, :valueType :db.type/ref},
    :codeList/union
@@ -326,6 +331,8 @@
    ;; --------------- xsd (XML Schema concepts)
    :xsd/abstract
    #:db{:cardinality :db.cardinality/many, :valueType :db.type/boolean},
+   :xsd/appliesToTypes
+   #:db{:cardinality :db.cardinality/many, :valueType :db.type/string},
    :xsd/base
    #:db{:cardinality :db.cardinality/many, :valueType :db.type/string},
    :xsd/anyAttribute
@@ -336,13 +343,19 @@
    #:db{:cardinality :db.cardinality/many, :valueType :db.type/ref},
    :xsd/choice
    #:db{:cardinality :db.cardinality/many, :valueType :db.type/ref},
+   :xsd/conformanceTargets
+   #:db{:cardinality :db.cardinality/one, :valueType :db.type/string}
    :xsd/default
    #:db{:cardinality :db.cardinality/one, :valueType :db.type/string},
    :xsd/elementFormDefault
    #:db{:cardinality :db.cardinality/one, :valueType :db.type/string},
+   :xsd/externalAdapterTypeIndicator
+   #:db{:cardinality :db.cardinality/one, :valueType :db.type/string},
    :xsd/fixed
    #:db{:cardinality :db.cardinality/one, :valueType :db.type/string},
-   #_#_:xsd/fractionDigits ; ?
+   :xsd/form
+   #:db{:cardinality :db.cardinality/one, :valueType :db.type/string},
+   :xsd/fractionDigits ; NIEM, at least
    #:db{:cardinality :db.cardinality/one, :valueType :db.type/long},
    :xsd/id ; ?
    #:db{:cardinality :db.cardinality/one, :valueType :db.type/string},
@@ -354,6 +367,8 @@
    #:db{:cardinality :db.cardinality/one, :valueType :db.type/long},
    #_#_:xsd/name ; ?
    #:db{:cardinality :db.cardinality/one, :valueType :db.type/string},
+   :xsd/lang
+   #:db{:cardinality :db.cardinality/one, :valueType :db.type/string}
    :xsd/listItemType
    #:db{:cardinality :db.cardinality/one, :valueType :db.type/string, :doc "This is the itemType attr of the element."},
    :xsd/maxExclusive ; ?
@@ -366,7 +381,7 @@
    #:db{:cardinality :db.cardinality/one, :valueType :db.type/number},
    :xsd/minInclusive ; ?
    #:db{:cardinality :db.cardinality/one, :valueType :db.type/number},
-   #_#_:xsd/minLength ; ?
+   :xsd/minLength ;  NIEM at leat
    #:db{:cardinality :db.cardinality/one, :valueType :db.type/long},
    :xsd/mixed ; ? ToDo: This (and maybe :xsd/id) are the only ones where I get an error: (said to be not used, but it is).
    #:db{:cardinality :db.cardinality/one, :valueType :db.type/boolean},
@@ -380,16 +395,22 @@
    #:db{:cardinality :db.cardinality/one, :valueType :db.type/boolean},
    :xsd/pattern
    #:db{:cardinality :db.cardinality/one, :valueType :db.type/string},
+   :xsd/processContents
+   #:db{:cardinality :db.cardinality/one, :valueType :db.type/string},
    #_#_:xsd/ref ; ?
    #:db{:cardinality :db.cardinality/one, :valueType :db.type/string},
    #_#_:xsd/restriction ; ?
    #:db{:cardinality :db.cardinality/one, :valueType :db.type/ref},
+   :xsd/schemaLocation
+   #:db{:cardinality :db.cardinality/one, :valueType :db.type/string}
    :xsd/substitutionGroup
    #:db{:cardinality :db.cardinality/one, :valueType :db.type/string},
    #_#_:xsd/totalDigits ; ?
    #:db{:cardinality :db.cardinality/one, :valueType :db.type/long},
    :xsd/targetNamespace
    #:db{:cardinality :db.cardinality/one, :valueType :db.type/string},
+   :xsd/totalDigits
+   #:db{:cardinality :db.cardinality/one, :valueType :db.type/long},
    :xsd/type
    #:db{:cardinality :db.cardinality/one, :valueType :db.type/string},
    :xsd/use
@@ -442,6 +463,8 @@
     :oagis/message-schema
     :ccts/component-schema
     :oasis/component-schema
+    :niem/domain-schema ; NIEM. Treated lib :generic/library-schema or :generic/*.dtype-schema ???
+    :niem/code-list-schema
     :iso/iso-20022-schema})
 
 :ROOT/ccts_BasedASCCPDefinition

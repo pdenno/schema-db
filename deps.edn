@@ -1,19 +1,19 @@
 {:paths   ["src" "test"]
- :deps    {applied-science/js-interop          {:mvn/version "0.3.3"}
+ :deps    {applied-science/js-interop          {:mvn/version "0.4.2"}
            org.apache.logging.log4j/log4j-api  {:mvn/version "2.20.0"}
            org.apache.logging.log4j/log4j-core {:mvn/version "2.20.0"}
            com.cemerick/url               {:mvn/version "0.1.1"}
-           com.taoensso/timbre            {:mvn/version "6.1.0"}
-           com.wsscode/pathom3            {:mvn/version "2022.10.19-alpha"}
+           com.taoensso/timbre            {:mvn/version "6.2.1"}
+           com.wsscode/pathom3            {:mvn/version "2023.01.31-alpha"} ; ToDo: Get rid of the resolvers entirely.
            dk.ative/docjure               {:mvn/version "1.19.0"}   ; spreadsheets
-           io.replikativ/datahike         {:mvn/version "0.6.1538"} ; Remember to rebuild databases on update.
+           io.replikativ/datahike         {:mvn/version "0.6.1542"} ; Remember to rebuild databases on update.
            mount/mount                    {:mvn/version "0.1.17"}
            org.clojure/clojure            {:mvn/version "1.11.1"}
            org.clojure/data.codec         {:mvn/version "0.1.1"}
            org.clojure/data.json          {:mvn/version "2.4.0"}
            org.clojure/data.xml           {:mvn/version "0.2.0-alpha8"}
 
-           org.clojure/tools.namespace {:mvn/version "1.4.2"} ; ToDo: Ignored in :dev :extra-deps!
+           org.clojure/tools.namespace {:mvn/version "1.4.4"} ; ToDo: Ignored in :dev :extra-deps!
 
            org.clojure/data.zip           {:mvn/version "1.0.0"}}
 
@@ -22,17 +22,14 @@
                        :jvm-opts       ["-XX:-OmitStackTraceInFastThrow"]
                        :extra-deps     {cider/cider-nrepl           {:mvn/version "0.30.0"}
                                         org.clojure/java.classpath  {:mvn/version "1.0.0"}
-                                        org.clojure/tools.namespace {:mvn/version "1.4.2"}}}
-
-           :lib-dev   {:extra-paths    ["test" "dev"] ; Not needed?
-                       :extra-deps     {thheller/shadow-cljs {:mvn/version "2.22.00"}}}
+                                        org.clojure/tools.namespace {:mvn/version "1.4.4"}}}
 
            :test      {:extra-paths    ["test" "dev"]
-                       :extra-deps     {lambdaisland/kaocha {:mvn/version "1.80.1274"}}
+                       :extra-deps     {lambdaisland/kaocha {:mvn/version "1.85.1342"}}
                        :exec-fn        kaocha.runner/exec-fn
                        :exec-args      {}}
 
-           :deploy    {:replace-deps   {slipset/deps-deploy {:mvn/version "0.2.0"}}
+           :deploy    {:replace-deps   {slipset/deps-deploy {:mvn/version "0.2.1"}}
                        :exec-fn        deps-deploy.deps-deploy/deploy
                        :exec-args      {:installer :remote
                                         :sign-releases? false ; signing problem (see mznp deps.edn)
@@ -45,3 +42,17 @@
            :var-deps-graph {:extra-deps      {thomasa/morpheus {:git/url "https://github.com/benedekfazekas/morpheus.git"
                                                                 :git/sha "9d6f2c1ede8be7ab4508065fe6b7e40e0c099ab6"}}
                             :main-opts       ["-m" "thomasa.morpheus.main"]}}}
+
+
+;;; |    :file |                       :name |         :current |          :latest |
+;;; |----------+-----------------------------+------------------+------------------|
+;;; | deps.edn |  applied-science/js-interop |            0.3.3 |            0.4.2 |
+;;; |          |           cider/cider-nrepl |           0.30.0 |           0.31.0 |
+;;; |          |         com.taoensso/timbre |            6.1.0 |            6.2.1 |
+;;; |          |         com.wsscode/pathom3 | 2022.10.19-alpha | 2023.01.31-alpha |
+;;; |          |      io.replikativ/datahike |         0.6.1538 |         0.6.1542 |
+;;; |          |         lambdaisland/kaocha |        1.80.1274 |        1.85.1342 |
+;;; |          | org.clojure/tools.namespace |            1.4.2 |            1.4.4 |
+;;; |          | org.clojure/tools.namespace |            1.4.2 |            1.4.4 |
+;;; |          |         slipset/deps-deploy |            0.2.0 |            0.2.1 |
+;;; |          |        thheller/shadow-cljs |          2.22.00 |           2.24.1 |

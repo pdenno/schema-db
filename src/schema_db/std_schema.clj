@@ -115,6 +115,15 @@
                                            (filter #(xml-type? % :xsd/simpleType) content))))
         (dissoc ?x :xml/ns-info :xml/content)))))
 
+(defparse :niem/code-list-schema
+  [xmap]
+  (binding [*prefix* "codeList"]
+    (let [content (-> (xpath xmap :xsd/schema) :xml/content)]
+      (as-> xmap ?x
+        (assoc ?x :schema/codeList (mapv #(rewrite-xsd % :niem/code-list)
+                                         (filter #(xml-type? % :xsd/simpleType) content)))
+        (dissoc ?x :xml/ns-info :xml/content)))))
+
 (defparse :iso/iso-20022-schema
   ;; Translate an ISO 20022 schema, financial codes as simple and complex types.
   [xmap]
@@ -161,21 +170,25 @@
       (cd node)
       @docs)))
 
+(defn where-am-i
+  [obj] obj)
+
 ;;; An annotation can contain multiple :xsd/documentation.
 (defparse :xsd/annotation
   [xmap]
-  (let [{:keys [documentation other attrs]} (xml-group-by xmap :xsd/documentation)
+  (let [{:keys [documentation app-info other attrs]} (xml-group-by xmap :xsd/documentation :xsd/appinfo)
         typ (if (every? string? documentation) :has/docString :has/documentation) ; ToDo: Not really sufficient.
         docs (singleize documentation)
         docs (if (vector? docs)
                (mapv rewrite-xsd docs)
                (rewrite-xsd docs))
         docs (collect-docs docs)]
-      (when (or (not-empty other) (not-empty attrs))
-        (log/warn "Annotation contains more than xsd:documentation: " {:other other :attrs attrs}))
-      (if (-> docs first vector?) ; Not investigated /opt/messaging/sources/misc/elena/2023-02-09/ProcessInvoice-BC_1.xsd
-        {typ (first docs)}
-        {typ docs})))
+    (when (not-empty app-info) (where-am-i app-info))
+    (when (or (not-empty other) (not-empty attrs))
+      (log/warn "Annotation contains more than xsd:documentation: " {:other other :attrs attrs}))
+    (if (-> docs first vector?) ; Not investigated /opt/messaging/sources/misc/elena/2023-02-09/ProcessInvoice-BC_1.xsd
+      {typ (first docs)}
+      {typ docs})))
 
 ;;; Typically a documentation will contain many CCT elements.
 (defparse :xsd/documentation
@@ -330,12 +343,11 @@
   ;; Walk through a code list collecting terms.
   [xmap]
   (assert (xml-type? xmap :xsd/simpleType))
-  (reset! diag xmap)
   (let [name?  (-> xmap :xml/attrs :name)
         id?    (-> xmap :xml/attrs :id)
         rest?  (when-let [res (xpath xmap :xsd/restriction)] (-> res rewrite-xsd not-empty))
         ;; I'm assuming they all look like this: #:xml{:tag :xsd/enumeration, :attrs {:value "Add"}}
-        terms? (-> (mapv #(-> % :xml/attrs :value)
+        terms? (-> (mapv #(-> % :xml/attrs :value) ; <================== ToDo: Yet :codeList/terms is :ref, this is going to be a string!
                          (filterv #(xml-type? % :xsd/enumeration)
                                   (:xml/content (xpath xmap :xsd/restriction)))) not-empty)
         union?  (when-let [res (xpath xmap :xsd/union)] (-> res rewrite-xsd not-empty))
@@ -347,62 +359,31 @@
                   union? (assoc :codeList/union union?))]
     {:model/codeList content}))
 
-(def non-standard-oagis-schema-topics
-  (let [pat {"urn:oagis-~A:CodeList_ConstraintTypeCode_1.xsd"            "Codelist, ConstraintTypes",
-             "urn:oagis-~A:CodeList_TimeFormatCode_1.xsd"                "Codelist, TimeFormats"
-             "urn:oagis-~A:CodeList_DateTimeFormatCode_1.xsd"            "Codelist, DateTimeFormats"
-             "urn:oagis-~A:CodeList_TimeZoneCode_1.xsd"                  "Codelist, TimeZones",
-             "urn:oagis-~A:CodeList_DateFormatCode_1.xsd"                "Codelist, DateFormat",
-             "urn:oagis-~A:CodeList_CharacterSetCode_IANA_20131220.xsd"  "Codelist, CharacterSets",
-             "urn:oagis-~A:CodeLists_1.xsd"                              "Codelist, Aggregated",
-             "urn:oagis-~A:CodeList_ConditionTypeCode_1.xsd"             "Codelist, ConditionTypes",
-             "urn:oagis-~A:CodeList_CurrencyCode_ISO_7_04.xsd"           "Codelist, Currencies"}]
-    (merge (reduce-kv (fn [m k v] (assoc m (cl-format nil k "10.6") v)) {} pat)
-           (reduce-kv (fn [m k v] (assoc m (cl-format nil k "10.8") v)) {} pat))))
-
-(def non-standard-schema-topics
-  "Easiest to just define these explicitly"
-  (merge non-standard-oagis-schema-topics
-         {"urn:iso:std:iso:20022:tech:xsd:pain.001.001.04"                              "Datatypes, Financial",
-          "urn:iso:std:iso:20022:tech:xsd:pain.001.001.05"                              "Datatypes, Financial",
-          "urn:iso:std:iso:20022:tech:xsd:pain.002.001.04"                              "Datatypes, Financial",
-          "urn:iso:std:iso:20022:tech:xsd:pain.002.001.05"                              "Datatypes, Financial",
-          "urn:iso:std:iso:20022:tech:xsd:pain.008.001.03"                              "Datatypes, Financial",
-          "urn:iso:std:iso:20022:tech:xsd:pain.008.001.04"                              "Datatypes, Financial",
-          "urn:oasis:names:specification:ubl:schema:xsd:CommonExtensionComponents-2"    "Components, CommonExtensions",
-          "urn:oasis:names:specification:ubl:schema:xsd:UnqualifiedDataTypes-2"         "Datatypes, Unqualified",
-          "urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2"        "Components, CommonBasic",
-          "urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2"    "Components, CommonAggregate",
-          "urn:un:unece:uncefact:data:specification:CoreComponentTypeSchemaModule:2"    "Components, Core",
-          "urn:oasis:names:specification:ubl:schema:xsd:QualifiedDataTypes-2"           "Datatypes, Qualified"
-          "urn:oasis:names:specification:ubl:schema:xsd:CommonSignatureComponents-2"    "Components, CommonSignature",
-          "http://uri.etsi.org/01903/v1.4.1#"                                            "ETSI, not investigaated"}))
-
-(defn schema-topic
-  "Return the portion of the URN that most specifically describes the schema content.
-   This is not necessarily unique!"
-  [urn]
-  (let [desc [(su/q-schema-sdo urn) (su/q-schema-type urn)]]
-     (cond (= desc [:oasis :ccts/message-schema])
-           (->> urn (re-matches #"^urn:oasis:names:specification:ubl:schema:xsd:(.+)-\d$") second),
-
-           (= desc [:oagi :ccts/message-schema])
-           (->> urn (re-matches #"^urn:oagis-\d+\.\d+:(.+)$") second),
-
-           (= desc [:oagi :generic/code-list-schema])
-           (->> urn (re-matches #"^urn:oagis-\d+\.\d+:(.+)$") second),
-
-           (= desc [:qif :generic/message-schema])
-           (->> urn (re-matches #"^urn:QIF-\d:Application:QIF(.+)$") second),
-
-           (= desc [:qif :generic/library-schema])
-           (->> urn (re-matches #"^urn:QIF-\d:Library:(.+)$") second),
-
-           (contains? non-standard-schema-topics urn)
-           (get non-standard-schema-topics urn),
-
-           :else
-           (do (log/warn "Cannot determine schema topic" urn) ""))))
+(defparse :niem/code-list
+  ;; Walk through a code list collecting terms.
+  [xmap]
+  (assert (xml-type? xmap :xsd/simpleType))
+  (reset! diag xmap)
+  (let [name?  (-> xmap :xml/attrs :name)
+        id?    (-> xmap :xml/attrs :id)
+        rest?  (when-let [res (xpath xmap :xsd/restriction)] (-> res rewrite-xsd not-empty))
+        ;; ToDo: I don't see how :generic/code-list is working. Perhaps it isn't! :codeList/terms is
+        ;;; #:db{:cardinality :db.cardinality/many, :valueType :db.type/ref}, :generic/code-list is picking up strings!
+        terms? (-> (mapv (fn [elem] (let [doc-string? (when-let [doc (xpath xmap :xsd/annotation)]
+                                                        (-> doc rewrite-xsd not-empty))]
+                                      (cond-> {}
+                                        true        (assoc :codeList/termName  (-> elem :xml/attrs :value))
+                                        doc-string? (merge doc-string?))))
+                         (filterv #(xml-type? % :xsd/enumeration)
+                                  (:xml/content (xpath xmap :xsd/restriction)))) not-empty)
+        union?  (when-let [res (xpath xmap :xsd/union)] (-> res rewrite-xsd not-empty))
+        content (cond-> {}
+                  name?  (assoc :codeList/name name?)
+                  id?    (assoc :codeList/id id?)
+                  rest?  (assoc :codeList/restriction rest?)
+                  terms? (assoc :codeList/terms terms?)
+                  union? (assoc :codeList/union union?))]
+    {:model/codeList content}))
 
 ;;;========================================= WIP =======================================
 ;;; For debugging

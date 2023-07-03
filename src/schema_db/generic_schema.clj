@@ -4,7 +4,7 @@
    [clojure.string]
    [schema-db.db-util     :as dbu    :refer [xpath xpath- xml-type?]]
    [schema-db.schema      :as schema :refer [simple-xsd?]]
-   [schema-db.schema-util :as su     :refer [xml-group-by *prefix* schema-sdo schema-spec schema-version schema-subversion schema-type schema-name
+   [schema-db.schema-util :as su     :refer [xml-group-by *prefix* schema-sdo schema-spec schema-version schema-subversion schema-type schema-name schema-topic
                                              merge-warn xsd-attr-map singleize]]
    [taoensso.timbre                  :as log]))
 
@@ -83,13 +83,14 @@
              (-> ?xmap :xml/ns-info :p->u (get "ROOT")))
         (root2xsd ?xmap)
         ?xmap)
+      ;; These tend to build on previously defined ones.
       (assoc ?xmap :schema/sdo (schema-sdo ?xmap))
       (assoc ?xmap :schema/spec (schema-spec ?xmap))
       (assoc ?xmap :schema/version (schema-version ?xmap))
       (assoc ?xmap :schema/subversion (schema-subversion ?xmap))
       (assoc ?xmap :schema/type (schema-type ?xmap))
-      (assoc ?xmap :schema/name (schema-name ?xmap)))))
-
+      (assoc ?xmap :schema/name (schema-name ?xmap))
+      (assoc ?xmap :schema/topic (schema-topic ?xmap)))))
 
 ;;; (read-schema-file "data/testing/elena/Company A - Invoice.xsd")
 (defn read-schema-file

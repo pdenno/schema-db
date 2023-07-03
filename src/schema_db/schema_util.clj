@@ -56,6 +56,8 @@
        (and (= stype :ccts/component-schema)  (= schema-sdo :oagi))   :generic/qualified-dtype-schema,
        (and (= stype :ccts/component-schema)  (= schema-sdo :oasis))  :oasis/component-schema,
        (and (= stype :generic/message-schema) (= schema-sdo :qif))    :generic/xsd-file,
+       (and (= stype :niem/domain-schema)     (= schema-sdo :niem))   :generic/qualified-dtype-schema, ; ToDo: review this choice
+       (and (= stype :niem/code-list-schema)  (= schema-sdo :niem))   :niem/code-list-schema, ; ToDo: review this choice
 
        (special-schema-type? stype) stype,
        (generic-schema-type? stype) stype,
@@ -137,6 +139,8 @@
           (re-matches #"^urn:oasis:[\w,\-,\:].*$" ns) :oasis,
           (re-matches #"^urn:un:unece:uncefact:[\w,\-,\:]+$" ns) :cefact, ; cefact via UBL ; ToDo: NONE OF THESE???
           (re-matches #"^http://www.openapplications.org/oagis/.*$" ns) :oagi,
+          (re-matches #"^http://release.niem.gov/niem/.*$" ns) :niem
+          (re-matches #"^http://reference.niem.gov/niem/.*$" ns) :niem
           (re-matches #"^urn:iso:std:iso:20022:tech:xsd:pain.+$" ns) :iso ; ISO via oagis
           (re-matches #"^http://uri.etsi.*" ns) :etsi
           (re-matches #"^http://www.w3.org/.*" ns) :w3c
@@ -177,29 +181,39 @@
 
 (defn schema-topic
   "Return the portion of the URN that most specifically describes the schema content.
-   This is not necessarily unique!"
-  [urn]
-  (let [desc [(q-schema-sdo urn) (q-schema-type urn)]]
-     (cond (= desc [:oasis :ccts/message-schema])
-           (->> urn (re-matches #"^urn:oasis:names:specification:ubl:schema:xsd:(.+)-\d$") second),
+   This is not necessarily unique! schema-topic is called after most processing is done.
+   Thus it can be called with just the db/unique :schema_name."
+  [xmap]
+  (let [desc [(:schema/sdo xmap) (:schema/type xmap)]
+        name (:schema/name xmap)
+        res (cond (= desc [:oasis :ccts/message-schema])
+                  (->> name (re-matches #"^urn:oasis:names:specification:ubl:schema:xsd:(.+)-\d$") second),
 
-           (= desc [:oagi :ccts/message-schema])
-           (->> urn (re-matches #"^urn:oagis-\d+\.\d+:(.+)$") second),
+                  (= desc [:oagi :ccts/message-schema])
+                  ;; urn:oagis-10.8.4:Nouns:ProjectAccounting
+                  (or (->> name (re-matches #"^urn:oagis-[\d,\.]+:Nouns:(.+)$") second),
+                      (->> name (re-matches #"^urn:oagis-[\d,\.]+:Components:(.+)$") second)),
 
-           (= desc [:oagi :generic/code-list-schema])
-           (->> urn (re-matches #"^urn:oagis-\d+\.\d+:(.+)$") second),
+                  (= desc [:oagi :generic/code-list-schema])
+                  (->> name (re-matches #"^urn:oagis-\d+\.\d+:(.+)$") second),
 
-           (= desc [:qif :generic/message-schema])
-           (->> urn (re-matches #"^urn:QIF-\d:Application:QIF(.+)$") second),
+                  (= desc [:qif :generic/message-schema])
+                  (->> name (re-matches #"^urn:QIF-.*:Application:QIF(.+)$") second),
 
-           (= desc [:qif :generic/library-schema])
-           (->> urn (re-matches #"^urn:QIF-\d:Library:(.+)$") second),
+                  (= desc [:qif :generic/library-schema])
+                  (->> name (re-matches #"^urn:QIF-.*:Library:(.+)$") second),
 
-           (contains? non-standard-schema-topics urn)
-           (get non-standard-schema-topics urn),
+                  (= desc [:niem :niem/domain-schema])
+                  (->> name (re-matches #"^urn:niem.*Domain:(.+)$") second),
 
-           :else
-           (do (log/warn "Cannot determine schema topic" urn) ""))))
+                  (= desc [:niem :niem/code-list-schema])
+                  "CodeList"
+
+                  (contains? non-standard-schema-topics name)
+                  (get non-standard-schema-topics name))]
+    (or res
+        (do (log/warn "Cannot determine schema topic" name)
+            "unknown"))))
 
 (defn schema-spec
   "Return a keyword signifying the specification of which the schema is part.
@@ -211,11 +225,12 @@
                :oasis      (cond (re-matches #"^urn:oasis:[\w,\-,\:]+:ubl:[\w,\-,\:]+(\-2)$" ns)                   :ubl
                                  (= ns "urn:oasis:names:specification:bdndr:schema:xsd:UnqualifiedDataTypes-1")    :ubl) ; I hesitate to call it :oasis
                :oagi       (when (re-matches #"^http://www.openapplications.org/oagis/10$" ns)                     :oagis)
+               :niem       :niem
                :iso        :iso-20022
                :etsi       :etsi-1903 ; ToDo: guessing
                :w3c        :w3c       ; In QIF somewhere!
                :qif        :qif
-               "default")]
+               nil)]
     (or spec (do (log/warn "Cannot determine schema-spec:" (:schema/pathname xmap) " Using :default.")
                  :unknown))))
 
@@ -226,21 +241,26 @@
     :oagis  "10"
     :qif    (let [[_ n] (re-matches #"^http://qifstandards.org/xsd/qif(\d)" (schema-ns xmap))]
               (or n ""))
-    "unknown"))
+    :niem   (let [[_ n] (or (re-matches #"^http://release.niem.gov/niem/.+/([0-9])\.[0-9]/.+$" (schema-ns xmap))
+                            (re-matches #"^http://reference.niem.gov/niem/.+/([0-9])\.[0-9]/.+$" (schema-ns xmap)))]
+              (or n ""))
+    "Ver[unknown]"))
 
 (defn schema-subversion
   "Return the subversion. NB: Currently this is hard coded. Should be an environment variable." ; ToDo: need env.
   [xmap]
   (let [spec   (:schema/spec xmap)
         pname  (:schema/pathname xmap)]
-    (cond (= spec :ubl) "3"
-          (= spec :oagis)
-          (let [[_ subver] (re-matches #".*OAGIS/[0-9]+\.([0-9,\.]+).*" pname)]
-            (or subver
-                (log/warn "Could not determine OAGIS subversion.")
-                "unknown"))
-          (= spec :cefact-ccl) "" ; ToDo: See also UBL CCL.
-          :else "unknown")))
+    (cond (= spec :ubl)          "3"
+          (= spec :oagis)        (let [[_ subver] (re-matches #".*OAGIS/[0-9]+\.([0-9,\.]+).*" pname)]
+                                   (or subver
+                                       (log/warn "Could not determine OAGIS subversion.")
+                                       ""))
+          (= spec :cefact-ccl)   "" ; ToDo: See also UBL CCL.
+          (= spec :niem)         (let [[_ n] (or (re-matches #"^http://release.niem.gov/niem/.+/[0-9]\.([0-9])/.+$" (schema-ns xmap))
+                                                 (re-matches #"^http://reference.niem.gov/niem/.+/[0-9]\.([0-9])/.+$" (schema-ns xmap)))]
+                                   (or n ""))
+          :else                  "")))
 
 ;;; ToDo: Make this a multi-method (on the case values)
 (defn schema-type
@@ -279,6 +299,16 @@
             :ccts/component-schema
             (re-matches #"^http://www.openapplications.org/oagis/10$" ns)
             :ccts/message-schema ; ToDo: Not quite correct.
+            :else (do (log/warn "Cannot determine schema-type:" pname)
+                      :generic/xsd-file))
+
+      :niem
+      (cond (re-matches #"^http://release.niem.gov/niem/codes/.*" ns)
+            :niem/code-list-schema ; This is new, just for NIEM so far! See, for example, codes/nga.xsd.
+            (re-matches #"^http://release.niem.gov/niem/domains/.*" ns)
+            :niem/domain-schema  ; This is new, just for NIEM so far! See, for example, domains/agriculture.xsd. Treat it like :generic/libaray-schema
+            (re-matches #"http://release.niem.gov/niem/niem-core/.*" ns)
+            :generic/library-schema ; The NIEM use of this niem-core.xsd, seems to be a mixed bag of types.
             :else (do (log/warn "Cannot determine schema-type:" pname)
                       :generic/xsd-file))
 
@@ -321,7 +351,8 @@
         ver  (:schema/version xmap)
         sver (:schema/subversion xmap)
         ver-str (if (empty? sver) ver (str ver "." sver ))
-        pname (:schema/pathname xmap)]
+        pname (:schema/pathname xmap)
+        res-pname (-> pname (str/split #"/") last (str/split #"\.") first)]
     (cond
       (= :oagi sdo)
       (if-let [[_ fname] (re-matches #".*Components/(\w+).xsd" pname)]
@@ -332,17 +363,30 @@
             (str "urn:oagis-" ver-str ":Common:" fname)
             (if-let [name  (-> (xpath xmap :xsd/schema :xsd/element) :xml/attrs :name)]
               (str  "urn:oagis-" ver-str ":" name)
-              (if-let [res-pname (-> pname (str/split #"/") last (str/split #"\.") first)]
+              (if res-pname
                 (do (log/warn "Using pathname to define OAGIS" ver-str "schema name:" res-pname)
                     (str "urn:oagis-" ver-str ":" res-pname))
-                (do (log/warn "Could not determine OAGIS" ver-str "schema name.")
+                (do (log/warn "Could not determine OAGIS" ver-str "schema name:" pname)
                     :mm/nil)))))),
-        (= :qif sdo)
-        (if-let [[_ fname] (re-matches #".*/QIFLibrary/(\w+).xsd" pname)]
-          (str "urn:QIF-" ver-str ":Library:" fname)
-          (if-let [[_ fname] (re-matches #".*/QIFApplications/(\w+).xsd" pname)]
-            (str "urn:QIF-" ver-str ":Application:" fname)
-            (do (log/warn "Could not determine QIF" ver-str "schema name.") :mm/nil)))
+      (= :niem sdo)
+      (if-let [[_ fname] (re-matches #".*codes/(\w+).xsd" pname)]
+        (str "urn:niem-" ver-str ":Code:" fname)
+        (if-let [[_ fname] (re-matches #".*domains/(\w+).xsd" pname)]
+          (str "urn:niem-" ver-str ":Domain:" fname)
+          (if (re-matches #".*niem-core.xsd" pname)
+            (str "urn:niem-" ver-str ":Core:core-schema")
+            (if res-pname
+              (do (log/warn "Using pathname to define NIEM" ver-str "schema name:" res-pname)
+                  (str "urn:niem-" ver-str ":" res-pname))
+              (do (log/warn "Could not determine NIEM" ver-str "schema name:" pname)
+                  :mm/nil))))),
+
+      (= :qif sdo)
+      (if-let [[_ fname] (re-matches #".*/QIFLibrary/(\w+).xsd" pname)]
+        (str "urn:QIF-" ver-str ":Library:" fname)
+        (if-let [[_ fname] (re-matches #".*/QIFApplications/(\w+).xsd" pname)]
+          (str "urn:QIF-" ver-str ":Application:" fname)
+          (do (log/warn "Could not determine QIF" ver-str "schema name.") :mm/nil)))
 
       (#{:oasis :cefact :iso :etsi} sdo)
       (if-let [name (schema-ns xmap)]
