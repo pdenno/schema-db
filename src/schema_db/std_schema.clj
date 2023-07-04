@@ -149,12 +149,6 @@
   (when-let [note (xpath- xmap :xsd*/annotation)]     (rewrite-xsd note))
   (when-let [doc  (xpath- xmap :xsd*/documentation)]  (rewrite-xsd doc)))
 
-(defn where-am-i ; <=============================================
-  [& obj]
-  (log/warn "where-am-i is still here!")
-  obj)
-
-
 ;;; An :xsd*/annotation can contain multiple :xsd*/documentation.
 ;;; An :xsd*/documentation can contain multiple CCT-specific element, e.g. ccts_BasedASCCPRevisionNumber.
 ;;;    [[#:cct{:BusinessContext [#:cct{:GUID "oagis-id-1d68712f1ff44355bb6b43e2d1862484"} #:cct{:Name "Bc_1"}]}
@@ -172,23 +166,20 @@
                     (vector? obj) (doall (map cd obj))
                     (string? obj) (swap! docs conj obj)
                     ;; The when because sometimes we see something like this: <ccts_Definition />.
-                    :else (when obj
-                            (where-am-i)
-                            (log/warn "Unknown doc" obj))))]
+                    :else (when obj (log/warn "Unknown doc" obj))))]
       (cd node)
       @docs)))
 
 ;;; An annotation can contain multiple :xsd*/documentation.
 (defparse :xsd*/annotation
   [xmap]
-  (let [{:keys [documentation app-info other attrs]} (xml-group-by xmap :xsd*/documentation :xsd*/appinfo)
+  (let [{:keys [documentation app-info other attrs]} (xml-group-by xmap :xsd*/documentation :xsd*/appinfo) ; <===================================== ToDo: app-info (NIEM)
         typ (if (every? string? documentation) :has_docString :has_documentation) ; ToDo: Not really sufficient.
         docs (singleize documentation)
         docs (if (vector? docs)
                (mapv rewrite-xsd docs)
                (rewrite-xsd docs))
         docs (collect-docs docs)]
-    (when (not-empty app-info) (where-am-i app-info)) ; <=================================
     (when (or (not-empty other) (not-empty attrs))
       (log/warn "Annotation contains more than :xsd*/documentation: " {:other other :attrs attrs}))
     (if (-> docs first vector?) ; Not investigated /opt/messaging/sources/misc/elena/2023-02-09/ProcessInvoice-BC_1.xsd
