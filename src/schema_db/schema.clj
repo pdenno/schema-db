@@ -2,19 +2,6 @@
   (:require
    [clojure.spec.alpha :as s]))
 
-;;; ToDo: Decide on using ns cct or ccts for :schema/type. Currently:
-;;; (d/q '[:find ?type :where [_ :schema/type  ?type]] @(connect-atm))
-;;; #{[:ccts/messageSchema] ; <==========
-;;;   [:generic/messageSchema]
-;;;   [:generic/unqualifiedDtypeSchema]
-;;;   [:ccts/componentSchema] ; <==========
-;;;   [:generic/librarySchema]
-;;;   [:generic/domainSchema] ; NIEM
-;;;   [:generic/codeListSchema]
-;;;   [:generic/xsdFile]
-;;;   [:generic/qualifiedDtypeSchema]
-;;;   [:cct/bie]} ; <==========
-
 (def db-schema+
   "Defines information for the datahike schema plus additional information about the property in :mm/info"
   {;; ---------------------- attribute (ToDo: another way? simpler?)
@@ -462,10 +449,10 @@
     :generic_xsdFile})
 
 (def special-schema-type? "These are associated with whole files."
-  #{:ccts_messageSchema
+  #{:cct_messageSchema
     :ubl_messageSchema
     :oagis_messageSchema
-    :ccts_componentSchema
+    :cct_componentSchema
     :oasis_componentSchema
     :niem_domainSchema ; NIEM. Treated lib :generic/library-schema or :generic/*.dtype-schema ???
     :niem_codeListSchema
@@ -515,6 +502,6 @@
 ;(s/def ::quantified-elem (s/and ::gelem (s/keys :req [:sp_minOccurs :sp_maxOccurs]))) ; 4th
 (s/def ::gelems (s/every ::gelem))
 ;(s/def ::model-seq (s/and ::db-ent (s/keys :req [:model_sequence]) #(s/valid? ::gelems (:model_sequence %)))) ; Test a property! 4th
-;(s/def ::ccts-based-message-schema (s/and ::db-ent (s/keys :req [:schema_type]) #(= :ccts_message-schema (:schema_type %)))) 4th
+;(s/def ::ccts-based-message-schema (s/and ::db-ent (s/keys :req [:schema_type]) #(= :cct_messageSchema (:schema_type %)))) 4th
 (s/def ::schema-type-kw #(or (special-schema-type? %)
                              (generic-schema-type? %)))

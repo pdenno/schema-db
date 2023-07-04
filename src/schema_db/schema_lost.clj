@@ -67,7 +67,7 @@
   [term schema-urn]
   (when-let [ent (d/q `[:find ?s . :where
                         [?s  :schema_name ~schema-urn]
-                        [?s  :schema_type :ccts_message-schema]
+                        [?s  :schema_type :cct_messageSchema]
                         [?s  :model_sequence ?m]
                         [?m  :sp_name ~term]
                         [?m  :sp_type ?type]]
@@ -75,7 +75,7 @@
     (let [found (du/resolve-db-id {:db/id ent} (connect-atm))]
       (-> {} ; I'm not keeping much of the schema!
           (assoc :db/id          ent)
-          (assoc :schema_type    :ccts_message-schema)
+          (assoc :schema_type    :cct_messageSchema)
           (assoc :model_sequence (:model_sequence found))
           (assoc :mm_access-method :schema-ref)))))
 
@@ -130,7 +130,7 @@
 (defn expand-type
   [found]
   (cond (= (:mm_access-method found) :library-lookup) :type-def
-        (s/valid? ::ccts-based-message-schema found)  :ccts_message-schema
+        (s/valid? ::ccts-based-message-schema found)  :cct_messageSchema
         (s/valid? ::tagged found)          :tagged
         (s/valid? ::type-ref found)        :type-ref
         (s/valid? ::model-seq found)       :model-seq
@@ -151,11 +151,11 @@
                :type-ref  (-> (expand-aux obj (:sp_type res) schema)
                                (assoc :expand/method ::type-ref)
                                (assoc :sp_name (:sp_name res)))
-               :ccts_message-schema (-> obj ; 4th
-                                    (assoc :expand/method :ccts_message-schema)
-                                    (assoc :sp_name term)
-                                    (assoc :sp_children (mapv #(expand-aux {} (:sp_type %) schema)
-                                                              (:model_sequence res))))
+               :cct_messageSchema (-> obj ; 4th
+                                      (assoc :expand/method :cct_messageSchema)
+                                      (assoc :sp_name term)
+                                      (assoc :sp_children (mapv #(expand-aux {} (:sp_type %) schema)
+                                                                (:model_sequence res))))
                :model-seq (-> obj
                                (assoc :expand/method ::model-seq)
                                (assoc :sp_name term)

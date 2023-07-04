@@ -55,10 +55,10 @@
        (keyword? specified) specified,
 
        ;; Files (schema-type) use :qualified/CamelCase
-       (and (= stype :ccts_messageSchema)    (= schema-sdo :oasis))  :std/messageSchema,
-       (and (= stype :ccts_messageSchema)    (= schema-sdo :oagi))   :std/messageSchema,
-       (and (= stype :ccts_componentSchema)  (= schema-sdo :oagi))   :generic/qualifiedDtypeSchema,
-       (and (= stype :ccts_componentSchema)  (= schema-sdo :oasis))  :oasis/componentSchema,
+       (and (= stype :cct_messageSchema)    (= schema-sdo :oasis))   :std/messageSchema,
+       (and (= stype :cct_messageSchema)    (= schema-sdo :oagi))    :std/messageSchema,
+       (and (= stype :cct_componentSchema)  (= schema-sdo :oagi))    :generic/qualifiedDtypeSchema,
+       (and (= stype :cct_componentSchema)  (= schema-sdo :oasis))   :oasis/componentSchema,
        (and (= stype :generic_messageSchema) (= schema-sdo :qif))    :generic/xsdFile,
        (and (= stype :niem_domainSchema)     (= schema-sdo :niem))   :generic/qualifiedDtypeSchema, ; ToDo: review this choice
        (and (= stype :niem_codeListSchema)   (= schema-sdo :niem))   :niem/codeListSchema, ; ToDo: review this choice
@@ -195,10 +195,10 @@
   [xmap]
   (let [desc [(:schema_sdo xmap) (:schema_type xmap)]
         name (:schema_name xmap)
-        res (cond (= desc [:oasis :ccts_messageSchema])
+        res (cond (= desc [:oasis :cct_messageSchema])
                   (->> name (re-matches #"^urn:oasis:names:specification:ubl:schema:xsd:(.+)-\d$") second),
 
-                  (= desc [:oagi :ccts_messageSchema])
+                  (= desc [:oagi :cct_messageSchema])
                   ;; urn:oagis-10.8.4:Nouns:ProjectAccounting
                   (or (->> name (re-matches #"^urn:oagis-[\d,\.]+:Nouns:(.+)$") second),
                       (->> name (re-matches #"^urn:oagis-[\d,\.]+:Components:(.+)$") second)),
@@ -294,9 +294,9 @@
             (= ns "urn:oasis:names:specification:ubl:schema:xsd:QualifiedDataTypes-2")
             :generic_qualifiedDtypeSchema,
             (re-matches #"^urn:oasis:names:specification:ubl:schema:xsd:Common[\w,\-,\:]+Components\-2$" ns)
-            :ccts_componentSchema
+            :cct_componentSchema
             (re-matches #"^urn:oasis:names:specification:ubl:schema:xsd:\w+-2$" ns)
-            :ccts_messageSchema
+            :cct_messageSchema
             :else (log/warn "Cannot determine schema-type:" pname))
 
       :oagi ; no URNs; guess based on pathname.
@@ -305,9 +305,9 @@
             (re-matches #".+CodeLists.+" pname)
             :generic_codeListSchema
             (re-matches #".+Components.+" pname)
-            :ccts_componentSchema
+            :cct_componentSchema
             (re-matches #"^http://www.openapplications.org/oagis/10$" ns)
-            :ccts_messageSchema ; ToDo: Not quite correct.
+            :cct_messageSchema ; ToDo: Not quite correct.
             :else (do (log/warn "Cannot determine schema-type:" pname)
                       :generic_xsdFile))
 
@@ -408,7 +408,7 @@
 
 (defn update-schema-type
   "After you've parsed the whole schema, its type is much more apparent.
-   Specifically, what was :ccts_message-schema might be be a :ccts_bie."
+   Specifically, what was :cct_messageSchema might be be a :cct_bie."
   [schema]
   (let [bie? (atom false)]
     (letfn [(b? [obj]

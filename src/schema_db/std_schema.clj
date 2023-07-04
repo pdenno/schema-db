@@ -13,7 +13,7 @@
 (defparse :generic/librarySchema
   [xmap]
   (binding [*prefix* "type-3"] ;<========================
-    (rewrite-xsd xmap :generic/xsd-file)))
+    (rewrite-xsd xmap :generic/xsdFile)))
 
 (defparse :std/messageSchema
   [xmap]
