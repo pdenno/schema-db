@@ -9,7 +9,7 @@
 
 ;;;================================ Are these being used? ======================================
 ;;; ================================ Expand: resolve to atomic schema parts  ===========================
-;;; In the process, keep track of the sp's :sp*/children, a property that is not in the DB owing to
+;;; In the process, keep track of the sp's :sp*_children, a property that is not in the DB owing to
 ;;; how much repetitive content that would produce for most schema and profiles.
 ;;; The idea of the expand methods is to serve client queries *indirectly* from DB content.
 (defn inlined-typedef-ref
@@ -17,12 +17,12 @@
   using inlined schema."
   [type-term schema-urn]
   (when-let [ent (d/q `[:find ?ent . :where
-                          [?s :schema/name ~schema-urn]
-                          [?s :model/inlinedTypedef ?ent]
-                          [?ent :sp/type ~type-term]]
+                          [?s :schema_name ~schema-urn]
+                          [?s :model_inlinedTypedef ?ent]
+                          [?ent :sp_type ~type-term]]
                       @(connect-atm))]
     (-> (du/resolve-db-id {:db/id ent} (connect-atm))
-        (assoc :mm/access-method :inlined-typedef))))
+        (assoc :mm_access-method :inlined-typedef))))
 
 (defn imported-typedef-ref
   "Return the object defining the argument type-term in the argument schema
@@ -30,80 +30,80 @@
   [type-term schema-urn]
   (let [[prefix term] (clojure.string/split type-term #":")]
     (when (and term prefix) ; Without the prefix things go awry!
-      (let [[{:mm/keys [ent lib]}]
-                (d/q `[:find ?ref2 ?s2-name
-                       :keys mm/ent mm/lib
-                       :where
-                       [?s1    :schema/name ~schema-urn]
-                       [?s1    :schema/importedSchemas ?i]
-                       [?i     :import/prefix ~prefix]
-                       [?i     :import/referencedSchema ?s2-name]
-                       [?s2    :schema/name ?s2-name]
-                       [?s2    :schema/content ?ref1] ; many :db/id
-                       [?ref1  :sp/name ~term]
-                       [?ref1  :sp/function ?fn]
-                       [?fn    :fn/type :type-ref]
-                       [?ref1  :sp/type ?type]
-                       [?s2    :schema/content ?ref2]
-                       [?ref2  :sp/name ?type]]
-                     @(connect-atm))]
-        (when (and ent lib)
-          (-> (du/resolve-db-id {:db/id ent} (connect-atm))
-              (assoc :mm/lib-where-found lib)
-              (assoc :mm/access-method :imported-typedef)))))))
+      (let [[{:keys [mm_ent mm_lib]}] ; 4th
+            (d/q `[:find ?ref2 ?s2-name
+                   :keys mm_ent mm_lib
+                   :where
+                   [?s1    :schema_name ~schema-urn]
+                   [?s1    :schema_importedSchemas ?i]
+                   [?i     :import_prefix ~prefix]
+                   [?i     :import_referencedSchema ?s2-name]
+                   [?s2    :schema_name ?s2-name]
+                   [?s2    :schema_content ?ref1] ; many :db/id
+                   [?ref1  :sp_name ~term]
+                   [?ref1  :sp_function ?fn]
+                   [?fn    :fn_type :type-ref]
+                   [?ref1  :sp_type ?type]
+                   [?s2    :schema_content ?ref2]
+                   [?ref2  :sp_name ?type]]
+                 @(connect-atm))]
+        (when (and mm_ent mm_lib)
+          (-> (du/resolve-db-id {:db/id mm_ent} (connect-atm))
+              (assoc :mm_lib-where-found mm_lib)
+              (assoc :mm_access-method :imported-typedef)))))))
 
 (defn model-sequence-type-ref
   [type-term schema-urn]
   (when-let [ent (d/q `[:find ?m . :where
-                        [?s  :schema/name ~schema-urn]
-                        [?s  :model/sequence ?m]
-                        [?m  :sp/type ~type-term]]
+                        [?s  :schema_name ~schema-urn]
+                        [?s  :model_sequence ?m]
+                        [?m  :sp_type ~type-term]]
                       @(connect-atm))]
     (-> (du/resolve-db-id {:db/id ent} (connect-atm))
-        (assoc :mm/access-method :model-sequence-type))))
+        (assoc :mm_access-method :model-sequence-type))))
 
 (defn schema-ref
-  "The term is found in the :model/sequence of a schema; return the schema."
+  "The term is found in the :model_sequence of a schema; return the schema."
   [term schema-urn]
   (when-let [ent (d/q `[:find ?s . :where
-                        [?s  :schema/name ~schema-urn]
-                        [?s  :schema/type :ccts/message-schema]
-                        [?s  :model/sequence ?m]
-                        [?m  :sp/name ~term]
-                        [?m  :sp/type ?type]]
+                        [?s  :schema_name ~schema-urn]
+                        [?s  :schema_type :ccts_message-schema]
+                        [?s  :model_sequence ?m]
+                        [?m  :sp_name ~term]
+                        [?m  :sp_type ?type]]
                       @(connect-atm))]
     (let [found (du/resolve-db-id {:db/id ent} (connect-atm))]
       (-> {} ; I'm not keeping much of the schema!
           (assoc :db/id          ent)
-          (assoc :schema/type    :ccts/message-schema)
-          (assoc :model/sequence (:model/sequence found))
-          (assoc :mm/access-method :schema-ref)))))
+          (assoc :schema_type    :ccts_message-schema)
+          (assoc :model_sequence (:model_sequence found))
+          (assoc :mm_access-method :schema-ref)))))
 
 (defn included-typedef-ref ; This is just for OAGIS, AFAIK.
   "Return the object defining the argument type-term in the argument schema
    using included schema."
   [type-term schema-urn]
   (when-let [ent (d/q `[:find ?s2 #_?cont . :where
-                        [?s1 :schema/name ~schema-urn]
-                        [?s1 :schema/includedSchemas ?i]
-                        [?s2 :schema/name ?i]
-                        [?s2 :sp/name ~type-term]
-                        #_[?cont  :term/type ~type-term]]
+                        [?s1 :schema_name ~schema-urn]
+                        [?s1 :schema_includedSchemas ?i]
+                        [?s2 :schema_name ?i]
+                        [?s2 :sp_name ~type-term]
+                        #_[?cont  :term_type ~type-term]]
                       @(connect-atm))]
     (-> (du/resolve-db-id {:db/id ent} (connect-atm))
-        (assoc :mm/access-method :included-typedef))))
+        (assoc :mm_access-method :included-typedef))))
 
 ;;;(library-lookup-ref "UBLExtension" "urn:oasis:names:specification:ubl:schema:xsd:CommonExtensionComponents-2")
 (defn library-lookup-ref
-  "Find the term as :schema/content"
+  "Find the term as :schema_content"
   [term schema-urn]
   (when-let [ent (d/q `[:find ?c . :where
-                        [?s :schema/name ~schema-urn]
-                        [?s :schema/content ?c]
-                        [?c :sp/name ~term]]
+                        [?s :schema_name ~schema-urn]
+                        [?s :schema_content ?c]
+                        [?c :sp_name ~term]]
                       @(connect-atm))]
     (-> (du/resolve-db-id {:db/id ent} (connect-atm))
-        (assoc :mm/access-method :library-lookup))))
+        (assoc :mm_access-method :library-lookup))))
 
 ;;; (term-ref ubl-invoice "InvoiceType")    ; get from inlined.
 ;;; (term-ref ubl-invoice "cbc:IssueDate")  ; get from imported.
@@ -129,8 +129,8 @@
 
 (defn expand-type
   [found]
-  (cond (= (:mm/access-method found) :library-lookup) :type-def
-        (s/valid? ::ccts-based-message-schema found)  :ccts/message-schema
+  (cond (= (:mm_access-method found) :library-lookup) :type-def
+        (s/valid? ::ccts-based-message-schema found)  :ccts_message-schema
         (s/valid? ::tagged found)          :tagged
         (s/valid? ::type-ref found)        :type-ref
         (s/valid? ::model-seq found)       :model-seq
@@ -145,31 +145,31 @@
                 :type-def res
                 :tagged   (-> res
                               (assoc :expand/method ::tagged)
-                              (assoc :sp/type (:sp/name res))
-                              (assoc :sp/name term)
-                              #_(dissoc :mm/access-method))
-               :type-ref  (-> (expand-aux obj (:sp/type res) schema)
+                              (assoc :sp_type (:sp_name res))
+                              (assoc :sp_name term)
+                              #_(dissoc :mm_access-method))
+               :type-ref  (-> (expand-aux obj (:sp_type res) schema)
                                (assoc :expand/method ::type-ref)
-                               (assoc :sp/name (:sp/name res)))
-               :ccts/message-schema (-> obj
-                                    (assoc :expand/method :ccts/message-schema)
-                                    (assoc :sp/name term)
-                                    (assoc :sp/children (mapv #(expand-aux {} (:sp/type %) schema)
-                                                              (:model/sequence res))))
+                               (assoc :sp_name (:sp_name res)))
+               :ccts_message-schema (-> obj ; 4th
+                                    (assoc :expand/method :ccts_message-schema)
+                                    (assoc :sp_name term)
+                                    (assoc :sp_children (mapv #(expand-aux {} (:sp_type %) schema)
+                                                              (:model_sequence res))))
                :model-seq (-> obj
                                (assoc :expand/method ::model-seq)
-                               (assoc :sp/name term)
-                               (assoc :sp/children (mapv #(expand-aux {} (:sp/name %) schema)
-                                                         (:model/sequence res))))
+                               (assoc :sp_name term)
+                               (assoc :sp_children (mapv #(expand-aux {} (:sp_name %) schema)
+                                                         (:model_sequence res))))
                nil (log/warn "Cannot expand term" term "for schema" schema))))]
     (expand-aux {} term schema)))
 
 (defn sp-defaults
   [sp]
   (cond-> sp
-    (not (:sp/minOccurs sp)) (assoc :sp/minOccurs 1)
-    (not (:sp/maxOccurs sp)) (assoc :sp/maxOccurs 1)
-    (not (:sp/type       sp)) (assoc :sp/type :mm/undefined)))
+    (not (:sp_minOccurs sp)) (assoc :sp_minOccurs 1)
+    (not (:sp_maxOccurs sp)) (assoc :sp_maxOccurs 1)
+    (not (:sp_type       sp)) (assoc :sp_type :mm_undefined)))
 
 ;;;=========================================================================================================
 (defn get-term-type
@@ -179,18 +179,18 @@
   [schema-urn term]
   (when-let [ent (or (d/q `[:find ?content .
                             :where
-                            [?schema  :schema/name ~schema-urn]
-                            [?schema  :schema/content ?content]
-                            [?content :term/type ~term]
-                            [?content :sp/function ?fn]
-                            [?fn      :fn/componentType :ABIE]]
+                            [?schema  :schema_name ~schema-urn]
+                            [?schema  :schema_content ?content]
+                            [?content :term_type ~term]
+                            [?content :sp_function ?fn]
+                            [?fn      :fn_componentType :ABIE]]
                           @(connect-atm)) ; ToDo: Datahike OR an NOT queries not implemented??? Use predicate?
                      (d/q `[:find ?content .
                             :where
-                            [?schema  :schema/name ~schema-urn]
-                            [?schema  :schema/content ?content]
-                            [?content :term/type ~term]
-                            [?content :sp/function ?fn]
-                            [?fn      :fn/componentType :BBIE]]
+                            [?schema  :schema_name ~schema-urn]
+                            [?schema  :schema_content ?content]
+                            [?content :term_type ~term]
+                            [?content :sp_function ?fn]
+                            [?fn      :fn_componentType :BBIE]]
                           @(connect-atm)))]
     (du/resolve-db-id (dp/pull @(connect-atm) '[*] ent) (connect-atm))))

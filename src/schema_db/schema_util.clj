@@ -7,7 +7,7 @@
    [datahike.api                 :as d]
    [datahike.pull-api            :as dp]
    [schema-db.db-util :as du     :refer [connect-atm xpath xml-type?]]
-   [schema-db.schema  :as schema :refer [db-schema+ simple-xsd? generic-schema-type? special-schema-type? cct-tag2db-ident-map]]
+   [schema-db.schema  :as schema :refer [db-schema-rekey simple-xsd? generic-schema-type? special-schema-type? cct-tag2db-ident-map]]
    [taoensso.timbre              :as log]))
 
 (def ^:dynamic *skip-doc-processing?*
@@ -43,33 +43,42 @@
       (:xml/attrs xmap) (assoc :attrs (:xml/attrs xmap)))))
 
 ;;; This does file-level dispatching as well as the details.
+;;; The naming rules:
+;;;        - schema_type will always be a _ keyword.
+;;;        - file-level dispatch uses :qualified/camelCase.
+;;;        - lower-level dispatch uses :qualified/kebab-case.
 (defn rewrite-xsd-dispatch
   [obj & [specified]]
-   (let [stype (:schema/type obj)
-         schema-sdo  (:schema/sdo obj)]
+   (let [stype (:schema_type obj)
+         schema-sdo  (:schema_sdo obj)]
      (cond ;; Optional 2nd argument specifies method to call
        (keyword? specified) specified,
 
-       ;; Files (schema-type)
-       (and (= stype :ccts/message-schema)    (= schema-sdo :oasis))  :std/message-schema,
-       (and (= stype :ccts/message-schema)    (= schema-sdo :oagi))   :std/message-schema,
-       (and (= stype :ccts/component-schema)  (= schema-sdo :oagi))   :generic/qualified-dtype-schema,
-       (and (= stype :ccts/component-schema)  (= schema-sdo :oasis))  :oasis/component-schema,
-       (and (= stype :generic/message-schema) (= schema-sdo :qif))    :generic/xsd-file,
-       (and (= stype :niem/domain-schema)     (= schema-sdo :niem))   :generic/qualified-dtype-schema, ; ToDo: review this choice
-       (and (= stype :niem/code-list-schema)  (= schema-sdo :niem))   :niem/code-list-schema, ; ToDo: review this choice
+       ;; Files (schema-type) use :qualified/CamelCase
+       (and (= stype :ccts_messageSchema)    (= schema-sdo :oasis))  :std/messageSchema,
+       (and (= stype :ccts_messageSchema)    (= schema-sdo :oagi))   :std/messageSchema,
+       (and (= stype :ccts_componentSchema)  (= schema-sdo :oagi))   :generic/qualifiedDtypeSchema,
+       (and (= stype :ccts_componentSchema)  (= schema-sdo :oasis))  :oasis/componentSchema,
+       (and (= stype :generic_messageSchema) (= schema-sdo :qif))    :generic/xsdFile,
+       (and (= stype :niem_domainSchema)     (= schema-sdo :niem))   :generic/qualifiedDtypeSchema, ; ToDo: review this choice
+       (and (= stype :niem_codeListSchema)   (= schema-sdo :niem))   :niem/codeListSchema, ; ToDo: review this choice
+       (= stype :generic_qualifiedDtypeSchema)                       :generic/qualifiedDtypeSchema
+       (= stype :generic_unqualifiedDtypeSchema)                     :generic/unqualifiedDtypeSchema
+       (= stype :generic_xsdFile)                                    :generic/xsdFile
+       (= stype :generic_codeListSchema)                             :generic/codeListSchema
+       (= stype :generic_librarySchema)                              :generic/librarySchema
 
        (special-schema-type? stype) stype,
        (generic-schema-type? stype) stype,
 
-       ;; Special simplifications
+       ;; Special simplifications use :qualified/kebab-case
        (and (map? obj) (contains? simple-xsd?           (:xml/tag obj)))  :generic/simple-xsd-elem,
        (and (map? obj) (contains? cct-tag2db-ident-map  (:xml/tag obj)))  :generic/simple-cct,
        (and (map? obj) (ignored-tag? obj))                                :ignore/ignore,
        (and (map? obj) (= "ccts" (-> obj :xml/tag namespace)))            :oasis/component-def,
        (and (map? obj) (contains? obj :xml/tag))                          (:xml/tag obj),
        (and (map? obj) (contains? obj :ref))                              :ref
-                                        ; ToDo: this one for polymorphism #{:xsd/element :xsd/choice} etc.
+                                        ; ToDo: this one for polymorphism #{:xsd*/element :xsd*/choice} etc.
        (and (map? obj) (contains? obj :xml/tag))                           (:xml/tag obj)
        :else (throw (ex-info "No method for obj: " {:obj obj})))))
 
@@ -78,7 +87,7 @@
 (defn obj-doc-string
   "If the object has annotations in its :xml/content, remove them and return
    modified object and the string content. Otherwise, just return object and nil.
-   The xsd:appinfo optional content is ignored."
+   The xsd*:appinfo optional content is ignored."
   [obj]
   (log/warn "Using obj-doc-string.")
   (if (or *skip-doc-processing?*
@@ -86,13 +95,13 @@
           (not (map? obj)) ; ToDo: This and next are uninvestigated problems in the etsi files.
           (not (contains? obj :xml/content))) ; 2023-03-17 I commented those out and added string? test.
     [obj nil]
-    (let [parts (group-by #(xml-type? % :xsd/annotation) (:xml/content obj))
+    (let [parts (group-by #(xml-type? % :xsd*/annotation) (:xml/content obj))
           annotes (get parts true)
           obj-annote-free (assoc obj :xml/content (vec (get parts false)))
           s (when (not-empty annotes)
               (str/trim
                (reduce (fn [st a]
-                         (str st "\n" (let [docs (filter #(xml-type? % :xsd/documentation) (:xml/content a))]
+                         (str st "\n" (let [docs (filter #(xml-type? % :xsd*/documentation) (:xml/content a))]
                                         (reduce (fn [more-s d]
                                                   (if (-> d :xml/content string?)
                                                     (str more-s "\n" (str/trim (:xml/content d)))
@@ -108,27 +117,27 @@
   "Lookup the topic for a schema in the DB."
   [urn]
   (d/q `[:find ?topic .
-         :where [?s :schema/name ~urn]
-         [?s :schema/topic ?topic]] @(connect-atm)))
+         :where [?s :schema_name ~urn]
+         [?s :schema_topic ?topic]] @(connect-atm)))
 
 (defn q-schema-sdo
   "Lookup the SDO for a schema in the DB."
   [urn]
   (d/q `[:find ?sdo .
-         :where [?s :schema/name ~urn]
-         [?s :schema/sdo ?sdo]] @(connect-atm)))
+         :where [?s :schema_name ~urn]
+         [?s :schema_sdo ?sdo]] @(connect-atm)))
 
 (defn q-schema-type
   "Lookup the type for a schema in the DB."
   [urn]
   (d/q `[:find ?type .
-         :where [?s :schema/name ~urn]
-         [?s :schema/type ?type]] @(connect-atm)))
+         :where [?s :schema_name ~urn]
+         [?s :schema_type ?type]] @(connect-atm)))
 
 (defn schema-ns
   "Return the namespace urn string for the argument xmap."
   [xmap]
-  (or (-> (xpath xmap :xsd/schema)  :xml/attrs :targetNamespace)
+  (or (-> (xpath xmap :xsd*/schema)  :xml/attrs :targetNamespace)
       (-> (xpath xmap :ROOT/schema) :xml/attrs :targetNamespace))) ; for some UBL-provided w3c schema
 
 (defn schema-sdo
@@ -145,7 +154,7 @@
           (re-matches #"^http://uri.etsi.*" ns) :etsi
           (re-matches #"^http://www.w3.org/.*" ns) :w3c
           (re-matches #"^http://qifstandards.org/xsd/qif3" ns) :qif)
-    (do (log/warn "Cannot determine schema SDO:" (:schema/pathname xmap) " using :unknown.")
+    (do (log/warn "Cannot determine schema SDO:" (:schema_pathname xmap) " using :unknown.")
         :unknown)))
 
 (def non-standard-oagis-schema-topics
@@ -184,35 +193,35 @@
    This is not necessarily unique! schema-topic is called after most processing is done.
    Thus it can be called with just the db/unique :schema_name."
   [xmap]
-  (let [desc [(:schema/sdo xmap) (:schema/type xmap)]
-        name (:schema/name xmap)
-        res (cond (= desc [:oasis :ccts/message-schema])
+  (let [desc [(:schema_sdo xmap) (:schema_type xmap)]
+        name (:schema_name xmap)
+        res (cond (= desc [:oasis :ccts_messageSchema])
                   (->> name (re-matches #"^urn:oasis:names:specification:ubl:schema:xsd:(.+)-\d$") second),
 
-                  (= desc [:oagi :ccts/message-schema])
+                  (= desc [:oagi :ccts_messageSchema])
                   ;; urn:oagis-10.8.4:Nouns:ProjectAccounting
                   (or (->> name (re-matches #"^urn:oagis-[\d,\.]+:Nouns:(.+)$") second),
                       (->> name (re-matches #"^urn:oagis-[\d,\.]+:Components:(.+)$") second)),
 
-                  (= desc [:oagi :generic/code-list-schema])
+                  (= desc [:oagi :generic_codeListSchema])
                   (->> name (re-matches #"^urn:oagis-\d+\.\d+:(.+)$") second),
 
-                  (= desc [:qif :generic/message-schema])
+                  (= desc [:qif :generic_messageSchema])
                   (->> name (re-matches #"^urn:QIF-.*:Application:QIF(.+)$") second),
 
-                  (= desc [:qif :generic/library-schema])
+                  (= desc [:qif :generic_librarySchema])
                   (->> name (re-matches #"^urn:QIF-.*:Library:(.+)$") second),
 
-                  (= desc [:niem :niem/domain-schema])
+                  (= desc [:niem :niem_domainSchema])
                   (->> name (re-matches #"^urn:niem.*Domain:(.+)$") second),
 
-                  (= desc [:niem :niem/code-list-schema])
+                  (= desc [:niem :niem_codeListSchema])
                   "CodeList"
 
                   (contains? non-standard-schema-topics name)
                   (get non-standard-schema-topics name))]
     (or res
-        (do (log/warn "Cannot determine schema topic" name)
+        (do (log/warn "Cannot determine schema topic: name = " name "file ="  (:schema_pathname xmap))
             "unknown"))))
 
 (defn schema-spec
@@ -220,7 +229,7 @@
    These are #{:ubl, :oagis, etc.}. It is used as :schema/spec"
   [xmap]
   (let [ns   (schema-ns xmap)
-        spec (case (:schema/sdo xmap)
+        spec (case (:schema_sdo xmap)
                :cefact     (when (= ns "urn:un:unece:uncefact:data:specification:CoreComponentTypeSchemaModule:2") :cefact-ccl),
                :oasis      (cond (re-matches #"^urn:oasis:[\w,\-,\:]+:ubl:[\w,\-,\:]+(\-2)$" ns)                   :ubl
                                  (= ns "urn:oasis:names:specification:bdndr:schema:xsd:UnqualifiedDataTypes-1")    :ubl) ; I hesitate to call it :oasis
@@ -231,12 +240,12 @@
                :w3c        :w3c       ; In QIF somewhere!
                :qif        :qif
                nil)]
-    (or spec (do (log/warn "Cannot determine schema-spec:" (:schema/pathname xmap) " Using :default.")
+    (or spec (do (log/warn "Cannot determine schema-spec:" (:schema_pathname xmap) " Using :default.")
                  :unknown))))
 
 (defn schema-version
   [xmap]
-  (case (:schema/spec xmap)
+  (case (:schema_spec xmap)
     :ubl    "2"
     :oagis  "10"
     :qif    (let [[_ n] (re-matches #"^http://qifstandards.org/xsd/qif(\d)" (schema-ns xmap))]
@@ -249,8 +258,8 @@
 (defn schema-subversion
   "Return the subversion. NB: Currently this is hard coded. Should be an environment variable." ; ToDo: need env.
   [xmap]
-  (let [spec   (:schema/spec xmap)
-        pname  (:schema/pathname xmap)]
+  (let [spec   (:schema_spec xmap)
+        pname  (:schema_pathname xmap)]
     (cond (= spec :ubl)          "3"
           (= spec :oagis)        (let [[_ subver] (re-matches #".*OAGIS/[0-9]+\.([0-9,\.]+).*" pname)]
                                    (or subver
@@ -265,81 +274,81 @@
 ;;; ToDo: Make this a multi-method (on the case values)
 (defn schema-type
   "Return a keyword signifying the specification of which the schema is part.
-   These are #{:ubl-2, :oagis-10, etc.}. It is used as :schema/spec
+   These are #{:ubl-2, :oagis-10, etc.}. It is used as :schema_spec
    This is just a first guess; see schema/update-schema-type."
   [xmap]
   (let [ns (schema-ns xmap)
-        sdo (:schema/sdo xmap)
-        pname (:schema/pathname xmap)]
+        sdo (:schema_sdo xmap)
+        pname (:schema_pathname xmap)]
     (case sdo
       :cefact
       (cond (= ns "urn:un:unece:uncefact:data:specification:CoreComponentTypeSchemaModule:2")
-            :generic/unqualified-dtype-schema
+            :generic_unqualifiedDtypeSchema
             :else (log/warn "Cannot determine schema-type:" pname))
 
       :oasis
       (cond (= ns "urn:oasis:names:specification:ubl:schema:xsd:UnqualifiedDataTypes-2")
-            :generic/unqualified-dtype-schema,
+            :generic_unqualifiedDtypeSchema,
             (= ns "urn:oasis:names:specification:bdndr:schema:xsd:UnqualifiedDataTypes-1")
-            :generic/unqualified-dtype-schema,
+            :generic_unqualifiedDtypeSchema,
             (= ns "urn:oasis:names:specification:ubl:schema:xsd:QualifiedDataTypes-2")
-            :generic/qualified-dtype-schema,
+            :generic_qualifiedDtypeSchema,
             (re-matches #"^urn:oasis:names:specification:ubl:schema:xsd:Common[\w,\-,\:]+Components\-2$" ns)
-            :ccts/component-schema
+            :ccts_componentSchema
             (re-matches #"^urn:oasis:names:specification:ubl:schema:xsd:\w+-2$" ns)
-            :ccts/message-schema
+            :ccts_messageSchema
             :else (log/warn "Cannot determine schema-type:" pname))
 
       :oagi ; no URNs; guess based on pathname.
       (cond (re-matches #".*Fields\.xsd$" pname) ; though it is in the "Components" directory
-            :generic/unqualified-dtype-schema
+            :generic_unqualifiedDtypeSchema
             (re-matches #".+CodeLists.+" pname)
-            :generic/code-list-schema
+            :generic_codeListSchema
             (re-matches #".+Components.+" pname)
-            :ccts/component-schema
+            :ccts_componentSchema
             (re-matches #"^http://www.openapplications.org/oagis/10$" ns)
-            :ccts/message-schema ; ToDo: Not quite correct.
+            :ccts_messageSchema ; ToDo: Not quite correct.
             :else (do (log/warn "Cannot determine schema-type:" pname)
-                      :generic/xsd-file))
+                      :generic_xsdFile))
 
       :niem
       (cond (re-matches #"^http://release.niem.gov/niem/codes/.*" ns)
-            :niem/code-list-schema ; This is new, just for NIEM so far! See, for example, codes/nga.xsd.
+            :niem_codeListSchema ; This is new, just for NIEM so far! See, for example, codes/nga.xsd.
             (re-matches #"^http://release.niem.gov/niem/domains/.*" ns)
-            :niem/domain-schema  ; This is new, just for NIEM so far! See, for example, domains/agriculture.xsd. Treat it like :generic/libaray-schema
+            :niem_domainSchema  ; This is new, just for NIEM so far! See, for example, domains/agriculture.xsd. Treat it like :generic_libaray-schema
             (re-matches #"http://release.niem.gov/niem/niem-core/.*" ns)
-            :generic/library-schema ; The NIEM use of this niem-core.xsd, seems to be a mixed bag of types.
+            :generic_librarySchema ; The NIEM use of this niem-core.xsd, seems to be a mixed bag of types.
             :else (do (log/warn "Cannot determine schema-type:" pname)
-                      :generic/xsd-file))
+                      :generic_xsdFile))
 
-      :etsi :generic/xsd-file
+      :etsi :generic_xsdFile
 
-      :iso :iso/iso-20022-schema
+      :iso :iso_iso20022Schema
 
       :qif
-      (cond (re-matches #".*QIFApplications/.*.xsd$" pname) :generic/message-schema
-            (re-matches #".*QIFLibrary/.*.xsd$"   pname)    :generic/library-schema
+      (cond (re-matches #".*QIFApplications/.*.xsd$" pname) :generic_messageSchema
+            (re-matches #".*QIFLibrary/.*.xsd$"   pname)    :generic_librarySchema
             :else (do (log/warn "Cannot determine schema-type:" pname)
-                      :generic/xsd-file))
+                      :generic_xsdFile))
       ;; Default
-      :generic/xsd-file)))
+      :generic_xsdFile)))
 
 (declare schema-name-special schema-name-std)
 (defn schema-name
   "Return the name of the schema object. This uses the XML content to determine one."
   [xmap]
   (let [
-        pname (:schema/pathname xmap)]
+        pname (:schema_pathname xmap)]
     (if (re-matches #".*sources/misc/.*" pname)
       (schema-name-special xmap)
       (schema-name-std xmap))))
 
 (defn schema-name-special
   [xmap]
-  (let [sdo  (:schema/sdo xmap)
-        ver  (:schema/version xmap)
-        sver (:schema/subversion xmap)
-        pname (:schema/pathname xmap)]
+  (let [sdo  (:schema_sdo xmap)
+        ver  (:schema_version xmap)
+        sver (:schema_subversion xmap)
+        pname (:schema_pathname xmap)]
     (if-let [[_ person dir fname] (re-matches #".*sources/misc/([a-zA-Z0-9\-\_]+)/([a-zA-Z0-9\-\_]+)/([a-zA-Z0-9\-\_]+).xsd" pname)]
       (cl-format nil "urn:~A-~A.~A:~A.~A.~A" (name sdo) ver sver person dir fname)
       (do (log/warn "Could not determine special schema name.")
@@ -347,11 +356,11 @@
 
 (defn schema-name-std
   [xmap]
-  (let [sdo  (:schema/sdo xmap)
-        ver  (:schema/version xmap)
-        sver (:schema/subversion xmap)
+  (let [sdo  (:schema_sdo xmap)
+        ver  (:schema_version xmap)
+        sver (:schema_subversion xmap)
         ver-str (if (empty? sver) ver (str ver "." sver ))
-        pname (:schema/pathname xmap)
+        pname (:schema_pathname xmap)
         res-pname (-> pname (str/split #"/") last (str/split #"\.") first)]
     (cond
       (= :oagi sdo)
@@ -361,13 +370,13 @@
           (str "urn:oagis-" ver-str ":Nouns:" fname)
           (if-let [[_ fname] (re-matches #".*Common/ISO20022/(pain[0-9,\.]+).xsd" pname)]
             (str "urn:oagis-" ver-str ":Common:" fname)
-            (if-let [name  (-> (xpath xmap :xsd/schema :xsd/element) :xml/attrs :name)]
+            (if-let [name  (-> (xpath xmap :xsd*/schema :xsd*/element) :xml/attrs :name)]
               (str  "urn:oagis-" ver-str ":" name)
               (if res-pname
                 (do (log/warn "Using pathname to define OAGIS" ver-str "schema name:" res-pname)
                     (str "urn:oagis-" ver-str ":" res-pname))
                 (do (log/warn "Could not determine OAGIS" ver-str "schema name:" pname)
-                    :mm/nil)))))),
+                    :mm_nil)))))),
       (= :niem sdo)
       (if-let [[_ fname] (re-matches #".*codes/(\w+).xsd" pname)]
         (str "urn:niem-" ver-str ":Code:" fname)
@@ -379,14 +388,14 @@
               (do (log/warn "Using pathname to define NIEM" ver-str "schema name:" res-pname)
                   (str "urn:niem-" ver-str ":" res-pname))
               (do (log/warn "Could not determine NIEM" ver-str "schema name:" pname)
-                  :mm/nil))))),
+                  :mm_nil))))),
 
       (= :qif sdo)
       (if-let [[_ fname] (re-matches #".*/QIFLibrary/(\w+).xsd" pname)]
         (str "urn:QIF-" ver-str ":Library:" fname)
         (if-let [[_ fname] (re-matches #".*/QIFApplications/(\w+).xsd" pname)]
           (str "urn:QIF-" ver-str ":Application:" fname)
-          (do (log/warn "Could not determine QIF" ver-str "schema name.") :mm/nil)))
+          (do (log/warn "Could not determine QIF" ver-str "schema name.") :mm_nil)))
 
       (#{:oasis :cefact :iso :etsi} sdo)
       (if-let [name (schema-ns xmap)]
@@ -399,20 +408,20 @@
 
 (defn update-schema-type
   "After you've parsed the whole schema, its type is much more apparent.
-   Specifically, what was :ccts/message-schema might be be a :ccts/bie."
+   Specifically, what was :ccts_message-schema might be be a :ccts_bie."
   [schema]
   (let [bie? (atom false)]
     (letfn [(b? [obj]
               (cond @bie? true
                     (map? obj)    (doseq [[k v] (seq obj)]
-                                    (when (= k :cct/BusinessContext)
+                                    (when (= k :cct_BusinessContext)
                                       (reset! bie? true))
                                     (b? v))
                     (vector? obj) (doall (map b? obj))))]
       (b? schema)
-      ;(log/info "Final :schema/type changed?: " @bie?)
+      ;(log/info "Final :schema_type changed?: " @bie?)
       (cond-> schema
-        @bie? (assoc :schema/type :cct/bie)))))
+        @bie? (assoc :schema_type :cct_bie)))))
 
 (defn singleize
   [obj]
@@ -423,7 +432,7 @@
 (defn merge-warn
   "Merge the argument maps but warn where any of them have the same keys (collisions),
    unless the keys are are on the ok-set. Values of collision keys are aggregated."
-  [maps & {:keys [ok-set] :or {ok-set #{:has/docString :has/documentation}}}]
+  [maps & {:keys [ok-set] :or {ok-set #{:has_docString :has_documentation}}}]
   (if (== 1 (count maps))
     maps
     (let [collisions (->> maps (map keys) (map set) (apply intersection))
@@ -449,7 +458,7 @@
   "Arguments are a db-ident and value.
    Returns the value coerced to that type."
   [k v]
-  (if-let [typ (-> db-schema+ k :db/valueType)]
+  (if-let [typ (-> db-schema-rekey k :db/valueType)]
     (try
       (if (#{:db.type/long :db.type/float :db.type/number, :db.type/double :db.type/boolean} typ)
         (let [val (read-string v)]
@@ -458,7 +467,7 @@
       (catch Exception _e (log/warn "Could not read xsd attribute declared a number: k = " k " v = " v)))
       (log/warn "Unknown attribute type: " k)))
 
-;;; ToDo: All of the things currently in ns "xsd" should be in a NS called "xsdAttr".
+;;; ToDo: All of the things currently in ns "xsd*" should be in a NS called "xsdAttr".
 (defn xsd-attr-map
   "Return a map of attributes where
     (1) the keys of a few special ones are in the argument namespace (a string) and the rest are in 'xsd', and_
@@ -467,14 +476,11 @@
   (reduce-kv
    (fn [m k v]
      (let [kk (if (#{:ref :name :id} k)
-                (keyword nspace (name k))
-                (keyword "xsd" (name k)))]
+                (keyword (str nspace "_" (name k)))
+                (keyword (str "xsd" "_" (name k))))] ; 4th
        (assoc m kk (xsd-value-type kk v))))
    {}
    attr-map))
-
-
-(def diag (atom nil))
 
 ;;; ToDo: This isn't used yet. Might not be needed.
 #_(defn create-lookup-refs
@@ -509,14 +515,14 @@
    Attrs should be a list of attributes to return"
   [& {:keys [sdo sort? _attrs] :or {sort? true sdo '_}}] ; ToDo: attrs
   (let [result (d/q '[:find ?n ?sdo
-                      :keys schema/name schema/sdo
+                      :keys schema_name schema_sdo
                       :in $ ?sdo
                       :where
-                      [?s :schema/name ?n]
-                      [?s :schema/sdo ?sdo]]
+                      [?s :schema_name ?n]
+                      [?s :schema_sdo ?sdo]]
                     @(connect-atm) sdo)]
     (cond->> result
-      true (map :schema/name)
+      true (map :schema_name)
       sort? sort
       true vec)))
 
@@ -527,7 +533,7 @@
   [schema-name & {:keys [resolve? filter-set] :or {resolve? true filter-set #{:db/id}}}]
   (when-let [ent  (d/q '[:find ?ent .
                          :in $ ?schema-name
-                         :where [?ent :schema/name ?schema-name]]
+                         :where [?ent :schema_name ?schema-name]]
                        @(connect-atm) schema-name)]
     (cond-> (dp/pull @(connect-atm) '[*] ent)
       resolve? (du/resolve-db-id (connect-atm) filter-set))))

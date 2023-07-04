@@ -122,15 +122,15 @@
   []
   (when (:rebuild-db? @db-cfg-atm)
     (doseq [file @bad-file-on-rebuild?]
-      (d/transact (connect-atm) [{:schema/pathname file
-                         :mm/fileNotRead? true}]))))
+      (d/transact (connect-atm) [{:schema_pathname file
+                         :mm_fileNotRead? true}]))))
 
 (defn bad-files
   "This creates a 'to do' list for debugging!"
   []
   (d/q '[:find [?p ...] :where
-         [?ent :mm/fileNotRead? true]
-         [?ent :schema/pathname ?p]]
+         [?ent :mm_fileNotRead? true]
+         [?ent :schema_pathname ?p]]
        @(connect-atm)))
 
 (defn unused-attrs
@@ -146,19 +146,19 @@
 #_(defn add-topics! []
   (let [forms (reduce (fn [forms name]
                         (if-let [topic (su/schema-topic name)]
-                          (conj forms {:schema/name name :schema/topic topic})
+                          (conj forms {:schema_name name :schema_topic topic})
                           forms))
                       []
                       (su/list-schemas))]
     (d/transact (connect-atm) forms)))
 
 (defn fix-includes! ; Just used on OAGIS schema, UBL-CommonExtensionComponents-2.3.xsd AFAIK.
-  "Files have :mm/tempInclude which are paths (typically relative)
-   Add :schema/includedSchemas where these are resolved to references to :schema/name."
+  "Files have :mm_tempInclude which are paths (typically relative)
+   Add :schema_includedSchemas where these are resolved to references to :schema_name."
   []
   (let [temps (d/q '[:find ?ent ?i ?p :keys s/ent s/include-file s/s-path :where
-                     [?ent :mm/tempInclude ?i]
-                     [?ent :schema/pathname ?p]]
+                     [?ent :mm_tempInclude ?i]
+                     [?ent :schema_pathname ?p]]
                    @(connect-atm))
         with-urn (map (fn [temp]
                         (let [[_ up _ ipath] (re-matches #"^((\.\./)*)(.*)$" (:s/include-file temp))
@@ -167,17 +167,17 @@
                               dir    (du/dir-up schema-path up-cnt)
                               file   (str dir "/" ipath)]
                           (if-let [urn (d/q `[:find ?urn . :where
-                                              [?e :schema/pathname ~file]
-                                              [?e :schema/name ?urn]]
+                                              [?e :schema_pathname ~file]
+                                              [?e :schema_name ?urn]]
                                             @(connect-atm))]
                             (assoc temp :s/include urn)
-                            (do (log/warn "While resolving includes, cannot find schema with :schema/pathname" file)
+                            (do (log/warn "While resolving includes, cannot find schema with :schema_pathname" file)
                                 temp))))
                       temps)]
     (d/transact (connect-atm)
                 (mapv #(-> {}
                            (assoc :db/id (:s/ent %))
-                           (assoc :schema/includedSchema (:s/include %)))
+                           (assoc :schema_includedSchema (:s/include %)))
                       (filter #(contains? % :s/include) with-urn)))))
 
 (defn postprocess-schemas!
@@ -187,11 +187,13 @@
   (fix-includes!)
   (update-bad-files!))
 
+(def rebuild-db? "Don't keep this on the db-cfg map." true)
+
 (defn create-db!
   "Create the database if :rebuild? is true."
   []
   (util/config-log :info) ; Prevent DH debugging messages.
-  (when (:rebuild-db? @db-cfg-atm)
+  (when rebuild-db?
     (reset! bad-file-on-rebuild? #{})
     (when (d/database-exists? @db-cfg-atm) (d/delete-database @db-cfg-atm))
     (d/create-database @db-cfg-atm)
@@ -221,6 +223,6 @@
   (do
     (util/config-log :info)
     (reset! db-cfg-atm {:store {:backend :file :path db-dir}
-                        :rebuild-db? true
+                        :keep-history? false
                         :schema-flexibility :write})
     (log/info "Starting schema-db: db connection = " @(connect-atm))))

@@ -12,7 +12,7 @@
 (def db-cfg-atm "Configuration map used for connecting to the db. It is set in core."  (atom nil))
 
 (defn connect-atm
-  "Set the var rad-mapper.db-util/conn by doing a d/connect.
+  "Set the var rad-mapper.db-util_conn by doing a d/connect.
    Return a connection atom."
   []
   (when-let [db-cfg @db-cfg-atm]
@@ -80,17 +80,17 @@
    Usually top-level call is a form representing a whole schema file. Walks schema."
   [form]
   (let [key-pred? ; Map keys corresponding to values that should be keywordized
-        #{:xsd/extension :cct/PrimitiveType :cct/scUse :cct/scType :cct/CategoryCode}
+        #{:xsd_extension :cct_PrimitiveType :cct_scUse :cct_scType :cct_CategoryCode}
         needs-zip? ; Map keys to encode as a map for later decoding (See db-utils/resolve-db-id)
-        #{:codeList/terms}]
+        #{:codeList_terms}]
     (letfn [(cf-aux [form]
               (cond (map? form) (reduce-kv (fn [m k v]
                                              ;;(when-not (map? v) (call-this {:form form}))
                                              (reset! diag {:v v})
                                              (if (needs-zip? k)
                                                (-> m
-                                                   (assoc :zip/keys (-> v keys vec))
-                                                   (assoc :zip/vals (-> v vals vec)))
+                                                   (assoc :zip_keys (-> v keys vec))
+                                                   (assoc :zip_vals (-> v vals vec)))
                                                (if (key-pred? k)
                                                  (assoc m k (keywordize v))
                                                  (assoc m k (cf-aux v)))))
@@ -122,7 +122,7 @@
                                                       true
                                                       obj))
                     (coll? obj)    (reset! ok? (every? sto obj))
-                    (keyword? obj) (if (= obj :failure/rewrite-xsd-nil-method) (reset! ok? false) true)
+                    (keyword? obj) (if (= obj :failure/rewrite-xsd-nil-method) (reset! ok? false) true) ; ToDo: :failure?
                     :else true))]
       (sto obj))
     @ok?))
@@ -166,8 +166,8 @@
   "Return a map that has an entry collecting the instances of every child type found.
    Argument is a vector of content."
   [content]
-  (let [typs #{:xsd/annotation :xsd/any :xsd/anyAttribute :xsd/attribute :xsd/complexContent :xsd/complexType :xsd/documentation
-               :xsd/element :xsd/group :xsd/include :xsd/restriction :xsd/schema :xsd/sequence :xsd/simpleContent :xsd/simpleType}
+  (let [typs #{:xsd*/annotation :xsd*/any :xsd*/anyAttribute :xsd*/attribute :xsd*/complexContent :xsd*/complexType :xsd*/documentation
+               :xsd*/element :xsd*/group :xsd*/include :xsd*/restriction :xsd*/schema :xsd*/sequence :xsd*/simpleContent :xsd*/simpleType}
         found (->> content (map :xml/tag) (reduce (fn [res tag] (if (typs tag) (conj res tag) res)) #{}))]
     (reduce (fn [res tag] (assoc res tag (filterv #(xml-type? % tag) content))) {} found)))
 
@@ -190,7 +190,7 @@
   (when (-> nspaces :p->u (contains? root-name))
     (log/warn "XML uses explicit 'root' namespace alias.")) ; ToDo: So pick something else.
   (as-> nspaces ?ns
-    (assoc-in ?ns [:p->u root-name] (or (get (:p->u ?ns) "") :mm/nil))
+    (assoc-in ?ns [:p->u root-name] (or (get (:p->u ?ns) "") :mm_nil))
     (update ?ns :p->u #(dissoc % ""))
     (update ?ns :u->ps
             (fn [uri2alias-map]
@@ -198,14 +198,14 @@
                            (assoc res uri (mapv #(if (= % "") root-name %) aliases)))
                          {}
                          uri2alias-map)))
-    ;; Now change "xs" to "xsd" if it exists.
+    ;; Now change "xs" to "xsd*" if it exists.
     (if (= "http://www.w3.org/2001/XMLSchema" (get (:p->u ?ns) "xs"))
       (as-> ?ns ?ns1
-        (assoc-in ?ns1 [:p->u "xsd"] "http://www.w3.org/2001/XMLSchema")
+        (assoc-in ?ns1 [:p->u "xsd"] "http://www.w3.org/2001/XMLSchema") ; 4th
         (update ?ns1 :p->u  #(dissoc % "xs"))
         (update ?ns1 :u->ps #(dissoc % "http://www.w3.org/2001/XMLSchema"))
         (assoc-in ?ns1 [:u->ps "http://www.w3.org/2001/XMLSchema"] ["xsd"]))
-      ?ns)))
+      (assoc-in ?ns [:p->u "xsd"] "http://www.w3.org/2001/XMLSchema")))) ; 4th
 
 ;;; ToDo: Currently this isn't looking for redefined aliases. It calls x/element-nss just once!
 ;;; (-> sample-ubl-message io/reader x/parse alienate-xml)
@@ -228,10 +228,10 @@
            obj))
        xml))))
 
-;;; (detagify '{:tag :cbc/InvoiceTypeCode, :attrs {:listID "UN/ECE 1001 Subset", :listAgencyID "6"}, :content ("380")})
+;;; (detagify '{:tag :cbc_InvoiceTypeCode, :attrs {:listID "UN/ECE 1001 Subset", :listAgencyID "6"}, :content ("380")})
 (defn detagify
   "Argument in content from clojure.data.xml/parse. Return a map where
-    (1) :tag is :schema/type,
+    (1) :tag is :schema_type,
     (2) :content, if present, is a simple value or recursively detagified.
     (3) :attrs, if present, are :xml/attrs.
    The result is that
@@ -256,12 +256,12 @@
   (let [xml (-> pathname io/reader x/parse)]
      {:xml/ns-info (explicit-root-ns (x/element-nss xml))
       :xml/content (-> xml alienate-xml clean-whitespace detagify vector)
-      :schema/pathname pathname}))
+      :schema_pathname pathname}))
 
 ;;;#?(:clj
 ;;;(defn parse-xml-string
 ;;;  "This is useful for debugging. Typical usage:
-;;;  (-> sss util/parse-xml-string (xpath :xsd/schema :xsd/complexType) rewrite-xsd)"
+;;;  (-> sss util/parse-xml-string (xpath :xsd*/schema :xsd*/complexType) rewrite-xsd)"
 ;;;  [s]
 ;;;  (let [pre "<?xml version=\"1.0\" encoding=\"UTF-8\"?>
 ;;;             <xsd:schema xmlns=\"urn:test-string\"
@@ -286,10 +286,10 @@
   "Wrap the argument (an atomic value) in a box.
    Note that unlike unbox, this only accepts atomic values."
   [obj]
-  (cond (string?  obj) {:box/string-val  obj},
-        (number?  obj) {:box/number-val  obj},
-        (keyword? obj) {:box/keyword-val obj},
-        (boolean? obj) {:box/boolean-val obj}))
+  (cond (string?  obj) {:box_string-val  obj},
+        (number?  obj) {:box_number-val  obj},
+        (keyword? obj) {:box_keyword-val obj},
+        (boolean? obj) {:box_boolean-val obj}))
 
 (defn unbox
   "Walk through the form replacing boxed data with the data.
@@ -297,7 +297,7 @@
   [data]
   (letfn [(box? [obj]
             (and (map? obj)
-                 (#{:box/string-val :box/number-val :box/keyword-val :box/boolean-val}
+                 (#{:box_string-val :box_number-val :box_keyword-val :box_boolean-val}
                   (-> obj seq first first))))  ; There is just one key in a boxed object.
           (ub [obj]
             (if-let [box-typ (box? obj)]

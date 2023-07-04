@@ -4,15 +4,15 @@
 
 ;;; ToDo: Decide on using ns cct or ccts for :schema/type. Currently:
 ;;; (d/q '[:find ?type :where [_ :schema/type  ?type]] @(connect-atm))
-;;; #{[:ccts/message-schema] ; <==========
-;;;   [:generic/message-schema]
-;;;   [:generic/unqualified-dtype-schema]
-;;;   [:ccts/component-schema] ; <==========
-;;;   [:generic/library-schema]
-;;;   [:generic/domain-schema] ; NIEM
-;;;   [:generic/code-list-schema]
-;;;   [:generic/xsd-file]
-;;;   [:generic/qualified-dtype-schema]
+;;; #{[:ccts/messageSchema] ; <==========
+;;;   [:generic/messageSchema]
+;;;   [:generic/unqualifiedDtypeSchema]
+;;;   [:ccts/componentSchema] ; <==========
+;;;   [:generic/librarySchema]
+;;;   [:generic/domainSchema] ; NIEM
+;;;   [:generic/codeListSchema]
+;;;   [:generic/xsdFile]
+;;;   [:generic/qualifiedDtypeSchema]
 ;;;   [:cct/bie]} ; <==========
 
 (def db-schema+
@@ -29,7 +29,7 @@
    #:db{:cardinality :db.cardinality/one, :valueType :db.type/string, :mm/info {:usage [:oagis]}},
    :cct/ACCRevisionNumber
    #:db{:cardinality :db.cardinality/one, :valueType :db.type/long, :mm/info {:usage [:oagis]}},
-   :cct/ACC_GUID
+   :cct/ACCguid
    #:db{:cardinality :db.cardinality/one, :valueType :db.type/string, :unique :db.unique/identity, :mm/info {:usage [:oagis]}},
    :cct/AlternativeBusinessTerms
    #:db{:cardinality :db.cardinality/one, :valueType :db.type/string, :mm/info {:usage [:oagis]}},
@@ -41,9 +41,9 @@
    #:db{:cardinality :db.cardinality/one, :valueType :db.type/long, :mm/info {:usage [:oagis]}},
    :cct/ASCCPRevisionNumber
    #:db{:cardinality :db.cardinality/one, :valueType :db.type/long, :mm/info {:usage [:oagis]  :property? true}},
-   :cct/ASCC_GUID
+   :cct/ASCCguid
    #:db{:cardinality :db.cardinality/one, :valueType :db.type/string, :unique :db.unique/identity, :mm/info {:usage [:oagis]}},
-   :cct/ASCCP_GUID
+   :cct/ASCCPguid
    #:db{:cardinality :db.cardinality/one, :valueType :db.type/string, :unique :db.unique/identity, :mm/info {:usage [:oagis]}},
    :cct/AssociatedObjectClass
    #:db{:cardinality :db.cardinality/one, :valueType :db.type/string :mm/info {:usage [:ubl]}}
@@ -55,9 +55,9 @@
    #:db{:cardinality :db.cardinality/one, :valueType :db.type/long, :mm/info {:usage [:oagis]}},
    :cct/BCCPRevisionNumber
    #:db{:cardinality :db.cardinality/one, :valueType :db.type/long, :mm/info {:usage [:oagis] :property? true}},
-   :cct/BCC_GUID
+   :cct/BCCguid
    #:db{:cardinality :db.cardinality/one, :valueType :db.type/string, :unique :db.unique/identity, :mm/info {:usage [:oagis]}},
-   :cct/BCCP_GUID
+   :cct/BCCPguid
    #:db{:cardinality :db.cardinality/one, :valueType :db.type/string, :unique :db.unique/identity,
         :mm/info {:usage [:oagis] :property? true}},
    :cct/BIEEntityTypeCode
@@ -428,6 +428,10 @@
    #_#_:zip/vals
    #:db{:cardinality :db.cardinality/many, :valueType :db.type/ref}})
 
+(def db-schema-rekey
+  "Use _ keys"
+  (update-keys db-schema+ #(keyword (str (namespace %) "_" (name %)))))
+
 (def db-schema
   "Create a Datahike-compatible schema from the above."
   (reduce-kv (fn [r k v]
@@ -435,70 +439,70 @@
                            (dissoc :mm/info)
                            (assoc :db/ident k))))
              []
-             db-schema+))
+             db-schema-rekey))
 
 (def simple-xsd?
-  {:xsd/length         :number
-   :xsd/minLength      :number
-   :xsd/maxLength      :number
-   :xsd/pattern        :string
-   :xsd/fractionDigits :number
-   :xsd/totalDigits    :number
-   :xsd/maxExclusive   :number
-   :xsd/maxInclusive   :number
-   :xsd/minExclusive   :number
-   :xsd/minInclusive   :number})
+  {:xsd*/length         :number
+   :xsd*/minLength      :number
+   :xsd*/maxLength      :number
+   :xsd*/pattern        :string
+   :xsd*/fractionDigits :number
+   :xsd*/totalDigits    :number
+   :xsd*/maxExclusive   :number
+   :xsd*/maxInclusive   :number
+   :xsd*/minExclusive   :number
+   :xsd*/minInclusive   :number})
 
 (def generic-schema-type? "These might be associated with whole files, but specializations might exist"
-  #{:generic/message-schema
-    :generic/library-schema
-    :generic/qualified-dtype-schema,
-    :generic/unqualified-dtype-schema
-    :generic/code-list-schema
-    :generic/xsd-file})
+  #{:generic_messageSchema
+    :generic_librarySchema
+    :generic_qualifiedDtypeSchema,
+    :generic_unqualifiedDtypeSchema
+    :generic_codeListSchema
+    :generic_xsdFile})
 
 (def special-schema-type? "These are associated with whole files."
-  #{:ccts/message-schema
-    :ubl/message-schema
-    :oagis/message-schema
-    :ccts/component-schema
-    :oasis/component-schema
-    :niem/domain-schema ; NIEM. Treated lib :generic/library-schema or :generic/*.dtype-schema ???
-    :niem/code-list-schema
-    :iso/iso-20022-schema})
-
-:ROOT/ccts_BasedASCCPDefinition
+  #{:ccts_messageSchema
+    :ubl_messageSchema
+    :oagis_messageSchema
+    :ccts_componentSchema
+    :oasis_componentSchema
+    :niem_domainSchema ; NIEM. Treated lib :generic/library-schema or :generic/*.dtype-schema ???
+    :niem_codeListSchema
+    :iso_iso20022Schema})
 
 (def cct-special-cases
-  #:ROOT{:ccts_ContentComponentValueDomain :cct/ContentComponentValueDomain,
-         :ccts_sc-id                    :cct/scId,
-         :ccts_sc-type                  :cct/scType,
-         :ccts_sc-use                   :cct/scUse,
-         :ccts_BasedACC_GUID            :cct/ACC_GUID
-         :ccts_BasedASCC_GUID           :cct/ASCC_GUID
-         :ccts_BasedASCCP_GUID          :cct/ASCCP_GUID
-         :ccts_BasedBCC_GUID            :cct/BCC_GUID
-         :ccts_BasedBCCP_GUID           :cct/BCCP_GUID
-         :ccts_BasedASCCPRevisionNumber :cct/ASCCPRevisionNumber
-         :ccts_BasedBCCPRevisionNumber  :cct/BCCPRevisionNumber
-         :ccts_BusinessContext          :cct/BusinessContext
-         :ccts_BasedASCCRevisionNumber  :cct/ASCCRevisionNumber
-         :ccts_BasedACCRevisionNumber   :cct/ACCRevisionNumber
-         :ccts_BasedBCCRevisionNumber   :cct/BCCRevisionNumber
-         :ccts_BasedASCCDefinition      :cct/ASCCDefinition
-         :ccts_BasedASCCPDefinition     :cct/ASCCPDefinition
-         :ccts_BasedACCDefinition       :cct/ACCDefinition
-         :ccts_BasedBCCDefinition       :cct/BCCDefinition
-         :ccts_BasedBCCPDefinition      :cct/BCCPDefinition})
+  "Translation of some names to schema-db db/ident."
+  #:ROOT{:ccts_ContentComponentValueDomain :cct_ContentComponentValueDomain,
+         :ccts_sc-id                    :cct_scId,
+         :ccts_sc-type                  :cct_scType,
+         :ccts_sc-use                   :cct_scUse,
+         :ccts_BasedACC_GUID            :cct_ACCguid
+         :ccts_BasedASCC_GUID           :cct_ASCCguid
+         :ccts_BasedASCCP_GUID          :cct_ASCCPguid
+         :ccts_BasedBCC_GUID            :cct_BCCguid
+         :ccts_BasedBCCP_GUID           :cct_BCCPguid
+         :ccts_BasedASCCPRevisionNumber :cct_ASCCPRevisionNumber
+         :ccts_BasedBCCPRevisionNumber  :cct_BCCPRevisionNumber
+         :ccts_BusinessContext          :cct_BusinessContext
+         :ccts_BasedASCCRevisionNumber  :cct_ASCCRevisionNumber
+         :ccts_BasedACCRevisionNumber   :cct_ACCRevisionNumber
+         :ccts_BasedBCCRevisionNumber   :cct_BCCRevisionNumber
+         :ccts_BasedASCCDefinition      :cct_ASCCDefinition
+         :ccts_BasedASCCPDefinition     :cct_ASCCPDefinition
+         :ccts_BasedACCDefinition       :cct_ACCDefinition
+         :ccts_BasedBCCDefinition       :cct_BCCDefinition
+         :ccts_BasedBCCPDefinition      :cct_BCCPDefinition})
 
 (def cct-tag2db-ident-map
-  "Translate names of properties found in standard schema to the equivalent used in the database."
-  (let [db-key-names (->> db-schema+ keys (filter #(= "cct" (namespace %))))
-        tag-names (map #(keyword "ROOT" (str "ccts_" (name %))) db-key-names)]
+  "Translate names of properties found in standard schema to the equivalent used in the database.
+   An example of a key in this map is :ROOT/ccts_UniqueID."
+  (let [db-key-names (->> db-schema+ keys (filter #(= "cct" (namespace %))) (map #(keyword (str (namespace %) "_" (name %)))))
+        tag-names (map #(keyword "ROOT" % ) (->> db-key-names (map #(->> % name (re-matches #"^cct_(.*)") second (str "ccts_")))))]
     (merge (zipmap tag-names db-key-names) cct-special-cases)))
 
 (def cct-obj?
-  (->> db-schema+ keys (filter #(= "cct" (namespace %))) set))
+  (->> db-schema-rekey keys (filter #(->> % name (re-matches #"^cct_.*"))) set))
 
 ;;; ToDo: These are mostly obsolete now!
 ;;; NB s/every-kv and s/every are probabilistic; they do not check every entry.
@@ -506,11 +510,11 @@
 (s/def ::db-ent (s/keys :req [:db/id]))
 (s/def ::type-ref (s/and ::db-ent (s/keys :req [:sp/name :sp/type])))
 (s/def ::tagged (s/or :generic-elem ::gelem :component ::basic))
-(s/def ::basic (s/and ::db-ent (s/keys :req [:sp/name :fn/type]) #(= :BBIE    (:fn-type %))))
-(s/def ::gelem (s/and ::db-ent (s/keys :req [:sp/name :fn/type]) #(= :element (:fn-type %))))
-(s/def ::quantified-elem (s/and ::gelem (s/keys :req [:sp/minOccurs :sp/maxOccurs])))
+;(s/def ::basic (s/and ::db-ent (s/keys :req [:sp_name :fn_type]) #(= :BBIE    (:fn-type %)))) ; 4th
+;(s/def ::gelem (s/and ::db-ent (s/keys :req [:sp_name :fn_type]) #(= :element (:fn-type %)))) ; 4th
+;(s/def ::quantified-elem (s/and ::gelem (s/keys :req [:sp_minOccurs :sp_maxOccurs]))) ; 4th
 (s/def ::gelems (s/every ::gelem))
-(s/def ::model-seq (s/and ::db-ent (s/keys :req [:model/sequence]) #(s/valid? ::gelems (:model/sequence %)))) ; Test a property!
-(s/def ::ccts-based-message-schema (s/and ::db-ent (s/keys :req [:schema/type]) #(= :ccts/message-schema (:schema/type %))))
+;(s/def ::model-seq (s/and ::db-ent (s/keys :req [:model_sequence]) #(s/valid? ::gelems (:model_sequence %)))) ; Test a property! 4th
+;(s/def ::ccts-based-message-schema (s/and ::db-ent (s/keys :req [:schema_type]) #(= :ccts_message-schema (:schema_type %)))) 4th
 (s/def ::schema-type-kw #(or (special-schema-type? %)
                              (generic-schema-type? %)))
