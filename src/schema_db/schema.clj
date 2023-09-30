@@ -206,7 +206,9 @@
    :mm/tempInclude
    #:db{:cardinality :db.cardinality/many, :valueType :db.type/string
         :doc "Despite the name, these are stored in the DB. In processing after all files
-              are stored, we do d/q looking for these and resolving them by adding a :schema/includedSchema." }
+              are stored, we COULD do d/q looking for these and resolving them by adding a :schema/includedSchema.
+              However, they are, for example, in oagis often include to '../Platform/2_7/Common/Components/Components.xsd',
+              so it's not such a good idea to blindly include them. Likewise for element/id, which are 'oagis-id-<some uuid>." }
    #_#_:mm/unhandledXML
    #:db{:cardinality :db.cardinality/one, :valueType :db.type/string},
    ;; ------------------ model (general modeling concepts)
